@@ -1946,11 +1946,25 @@ function apiAddOrder(data){
   // limits quantity to available stock, but re-checking here means a bad
   // or stale value can never push out_qty past what's actually on hand.
   var stockAll = getStockData('MAIN').concat(getStockData('SUB'));
+  // BUGFIX (wrong item amounts on any bill mixing "Daily" and "1 Month +
+  // Extra Days" products): this used to recompute EVERY item's amount
+  // using data.calcType — a single bill-level flag that is 'monthly' if
+  // ANY item on the bill is monthly. So on a mixed bill, a plain Daily
+  // item got recalculated as if it were Monthly (using its empty/zero
+  // month rate), collapsing its stored amount to near-zero — while the
+  // bill's overall Total (data.total, computed correctly per-item back in
+  // buildDObj) stayed right. Net effect: the bill printed fine the moment
+  // it was created (from the in-memory object), but re-opening the same
+  // bill later from Search Bills showed item amounts that didn't add up
+  // to the Total Rental. Fix: derive each item's OWN calc type from its
+  // own `type` field (set per-product when the bill was built), exactly
+  // like mkHTML() already does for display — never the bill-level flag.
   items = items.map(function(it){
     var s = stockAll.find(function(x){ return x.name.trim().toLowerCase()===(it.name||'').trim().toLowerCase(); });
     var avail = s ? s.available : (Number(it.qty)||0);
     var clampedQty = Math.max(0, Math.min(Number(it.qty)||0, avail));
-    return Object.assign({}, it, { qty: clampedQty, amount: calcItemAmount(clampedQty, Number(data.days)||1, Number(it.price)||0, Number(it.monthPrice)||0, data.calcType||'daily') });
+    var itemCtype = it.type==='1 month + extra days' ? 'monthly' : 'daily';
+    return Object.assign({}, it, { qty: clampedQty, amount: calcItemAmount(clampedQty, Number(data.days)||1, Number(it.price)||0, Number(it.monthPrice)||0, itemCtype) });
   }).filter(function(it){ return it.qty>0; });
   var sale = {
     id: DB._sid++, bill_no:data.billNo, customer:data.customer, phone:data.phone, address:data.address||'',
@@ -1969,6 +1983,36 @@ function apiAddOrder(data){
 function apiAddReturn(data){
   var items = data.items||[];
   var fb = Number(data.finalBalance)||0;
+  var orig = DB.sales.find(function(s){ return s.bill_no===data.originalBillNo; });
+  // BUGFIX (defense-in-depth, mirrors apiSettleMissingItems' clamp): a UI
+  // bug (now fixed — see fillRet()/resetRForm()) could previously leave a
+  // leftover qty from a PREVIOUS return's item sitting in the form, so a
+  // return for THIS bill could be submitted carrying a product that was
+  // never even dispatched on it — crediting in_qty for stock that was
+  // never taken out, and billing an amount that was never owed. Never
+  // trust the submitted item list on its own: drop any item that isn't on
+  // the original bill at all, and cap every item's qty to what's actually
+  // still outstanding (dispatched minus already returned across every
+  // earlier return of this same bill) — the same "actual missing" math
+  // apiGetReturns()/apiSettleMissingItems() already use elsewhere.
+  if(orig && orig.items){
+    var returnedByProduct={};
+    DB.returns.filter(function(x){ return x.original_bill_no===data.originalBillNo; }).forEach(function(x){
+      (x.items||[]).forEach(function(i){
+        var key=(i.product||'').trim().toLowerCase();
+        returnedByProduct[key]=(returnedByProduct[key]||0)+(Number(i.qty)||0);
+      });
+    });
+    items = items.map(function(item){
+      var key=(item.name||'').trim().toLowerCase();
+      var si = orig.items.find(function(x){ return x.product.trim().toLowerCase()===key; });
+      if(!si) return Object.assign({}, item, {qty:0}); // not part of this bill at all — drop it
+      var dispatched = Number(si.qty)||0;
+      var alreadyReturned = returnedByProduct[key]||0;
+      var stillOutstanding = Math.max(0, dispatched-alreadyReturned);
+      return Object.assign({}, item, {qty: Math.min(Number(item.qty)||0, stillOutstanding)});
+    }).filter(function(item){ return item.qty>0; });
+  }
   var ret = {
     id: DB._rid++, return_bill_no:data.returnBillNo, original_bill_no:data.originalBillNo,
     customer:data.customer, phone:data.phone, return_date: data.returnDate || new Date().toISOString(),
@@ -1980,7 +2024,6 @@ function apiAddReturn(data){
   };
   DB.returns.push(ret);
   items.forEach(function(it){ updateInv(it.name, it.group||'MAIN', 'in_qty', Number(it.qty)||0); });
-  var orig = DB.sales.find(function(s){ return s.bill_no===data.originalBillNo; });
   if(orig){
     // The return recalculates the true rental cost for the actual duration and
     // tracks its own final_balance as the authoritative amount still owed for
@@ -2498,8 +2541,21 @@ function nowDT(){var n=new Date();n.setMinutes(n.getMinutes()-n.getTimezoneOffse
 // return with the wrong original bill. newBN() is now backed by a
 // dedicated persistent counter (DB._bnid) that can never repeat.
 function newBN(){
-  DB._bnid = (Number(DB._bnid)||0) + 1;
-  return 'SMC-'+String(DB._bnid).padStart(6,'0');
+  // Extra safety net: DB._bnid is a monotonically-increasing counter and
+  // placeD()/placeR() already sync with the Server first (see
+  // netSyncBeforeCommit) specifically so two PCs never generate the same
+  // number. But if two people on two PCs somehow still click "Save" in the
+  // exact same instant (before either push completes), or an older backup
+  // gets restored and briefly disagrees with the live counter, double-check
+  // the generated number isn't already used by an existing bill/return and
+  // keep incrementing until it's actually free — so a real collision can
+  // never silently merge two different bills under one number.
+  var bn;
+  do{
+    DB._bnid = (Number(DB._bnid)||0) + 1;
+    bn = 'SMC-'+String(DB._bnid).padStart(6,'0');
+  } while(DB.sales.some(function(s){return s.bill_no===bn;}) || DB.returns.some(function(r){return r.return_bill_no===bn;}));
+  return bn;
 }
 function fdt(s){
   if(!s)return '—';
@@ -3264,6 +3320,25 @@ function resetDForm(){
   el('d-out').value='';el('d-in').value='';el('d-adv').value='';
   ALL_PRODUCTS.forEach(function(p){ dQty[p.id]=0; dPrice[p.id]=0; dCalcType[p.id]='daily'; });
   buildD();
+  // BUGFIX (stale item carrying over into the next dispatch bill): buildD()
+  // deliberately restores whatever qty/rate/calc-type was in each input
+  // BEFORE it last rebuilt the table — that's needed so a background
+  // stock refresh (loadStock() calls buildD() constantly) never wipes out
+  // what the operator is mid-way typing. But that same "restore" step ran
+  // right here too, after a bill was just placed, silently bringing back
+  // the PREVIOUS bill's qty/rate for every product — even ones that had
+  // nothing to do with the new bill about to be created. The next
+  // dispatch could then go out with leftover quantities of a product the
+  // operator never touched. Force every input back to empty/zero here,
+  // AFTER buildD()'s restore has already run, so a fresh bill always
+  // starts from a truly blank table.
+  ALL_PRODUCTS.forEach(function(p){
+    var qEl=el('dq-'+p.id); if(qEl) qEl.value=0;
+    var pEl=el('dp-'+p.id); if(pEl) pEl.value='';
+    var mEl=el('dm-'+p.id); if(mEl) mEl.value='';
+    var cEl=el('d-ctype-'+p.id); if(cEl) cEl.value='daily';
+  });
+  calcD();
 }
 function resetRForm(){
   el('r-bill').value='';el('r-name').value='';el('r-phone').value='';
@@ -3273,6 +3348,29 @@ function resetRForm(){
   el('r-back').value=td();
   if(el('r-back-time')) el('r-back-time').value=nowHM();
   buildR();
+  // BUGFIX (same story as resetDForm() above, for Returns — and higher
+  // stakes here): buildR() restores each input's PRE-rebuild value so a
+  // background stock refresh never erases what's being typed. Called
+  // right after a return is placed, that same restore brought back the
+  // just-returned bill's qty/rate/month-rate for every product — with
+  // rq-*'s `max` attribute still left at the OLD bill's dispatched qty.
+  // The moment the operator searched a completely different bill next,
+  // fillRet()'s branch for a product NOT on that bill only zeroed the
+  // in-memory rQty/rDispatched — it never touched these leftover DOM
+  // values — and calcR() re-reads qty straight from the input on every
+  // call, silently restoring rQty right back to the stale amount. A
+  // second bill's return could then go out carrying a phantom item that
+  // was never even dispatched on it: crediting stock that was never
+  // taken out, and adding an amount to the bill that was never owed.
+  // Force every input to a true blank/zero state here too.
+  ALL_PRODUCTS.forEach(function(p){
+    var qEl=el('rq-'+p.id); if(qEl){qEl.value=0; qEl.max=0;}
+    var pEl=el('rp-'+p.id); if(pEl) pEl.value='';
+    var moEl=el('rmo-'+p.id); if(moEl) moEl.value='';
+    var cEl=el('r-ctype-'+p.id); if(cEl) cEl.value='daily';
+    var mEl=el('rm-'+p.id); if(mEl){mEl.textContent='—'; mEl.style.color='var(--mu)';}
+    var dEl=el('rd-'+p.id); if(dEl) dEl.textContent='—';
+  });
   calcR();
 }
 
@@ -4237,7 +4335,22 @@ function fillRet(b){
   el('r-out').value=toISODate(b.outDate);
   if(!el('r-back').value) el('r-back').value=td();
   if(el('r-back-time')&&!el('r-back-time').value) el('r-back-time').value=nowHM();
-  el('r-prev').value=b.advance||'';
+  // BUGFIX (advance re-applied on every partial return of the same bill):
+  // this always prefilled "Prev Advance" with the FULL original advance
+  // paid at dispatch time — even on a bill's 2nd, 3rd, etc. partial
+  // return. The advance is paid ONCE; the first partial return already
+  // offset the customer's total against it. Reusing the full amount
+  // again on every later return double/triple-counted the same advance,
+  // undercharging the customer (or overstating a refund) on every return
+  // after the first. Prefill with what's actually left of it instead:
+  // original advance minus however much of it earlier returns of this
+  // same bill already recorded as used (their own prev_advance field).
+  var advAlreadyUsed=0;
+  DB.returns.filter(function(x){ return x.original_bill_no===b.billNo; }).forEach(function(x){
+    advAlreadyUsed += Number(x.prev_advance)||0;
+  });
+  var advRemaining = Math.max(0, (Number(b.advance)||0) - advAlreadyUsed);
+  el('r-prev').value=advRemaining||'';
   // BUGFIX: if this bill already has one or more earlier partial returns,
   // "Dispatched" must show what's still outstanding, not the full original
   // dispatch qty — otherwise a second/third return miscalculates Missing
@@ -4264,8 +4377,26 @@ function fillRet(b){
       var moEl=el('rmo-'+p.id); if(moEl&&found.monthPrice){moEl.value=found.monthPrice;}
       var mEl=el('rm-'+p.id); if(mEl){mEl.textContent=outstanding>0?'✅ complete':'—';mEl.style.color='var(--ok)';}
     } else {
-      rDispatched[p.id]=0; rQty[p.id]=0;
+      // BUGFIX (phantom item leaking into an unrelated bill's return):
+      // this used to only zero the in-memory rDispatched/rQty for a
+      // product that isn't on THIS bill — it never touched the actual
+      // qty/rate/month-rate input fields or their `max`. If that product
+      // still had a leftover qty (typed while returning a DIFFERENT bill
+      // moments earlier, and preserved by buildR()'s "keep what's typed"
+      // behaviour), the input kept showing that old qty and `max`, and
+      // calcR() re-reads qty straight from the DOM every time it runs —
+      // silently overwriting rQty back to the stale value right after
+      // this branch just set it to 0. That let a return for Bill B go out
+      // carrying an item that was never even dispatched on Bill B. Now
+      // every field for a not-on-this-bill product is force-cleared, not
+      // just the in-memory copies.
+      rDispatched[p.id]=0; rQty[p.id]=0; rPrice[p.id]=0; rCalcType[p.id]='daily';
       var dEl2=el('rd-'+p.id); if(dEl2)dEl2.textContent='—';
+      var qEl2=el('rq-'+p.id); if(qEl2){qEl2.max=0; qEl2.value=0;}
+      var pEl2=el('rp-'+p.id); if(pEl2) pEl2.value='';
+      var moEl2=el('rmo-'+p.id); if(moEl2) moEl2.value='';
+      var cEl2=el('r-ctype-'+p.id); if(cEl2) cEl2.value='daily';
+      var mEl2=el('rm-'+p.id); if(mEl2){mEl2.textContent='—'; mEl2.style.color='var(--mu)';}
     }
   });
   calcR();
