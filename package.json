@@ -1,0 +1,36 @@
+{
+  "name": "sm-centering",
+  "version": "1.0.0",
+  "description": "S M Centering - Rental & Billing (Offline + Network Sync)",
+  "main": "main.js",
+  "author": "S M Centering",
+  "license": "UNLICENSED",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win portable"
+  },
+  "devDependencies": {
+    "electron": "^31.0.0",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "com.smcentering.app",
+    "productName": "S M Centering",
+    "files": [
+      "main.js",
+      "index.html",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        { "target": "portable", "arch": ["x64"] }
+      ]
+    },
+    "portable": {
+      "artifactName": "S_M_Centering.exe"
+    },
+    "asar": true,
+    "compression": "maximum"
+  }
+}
