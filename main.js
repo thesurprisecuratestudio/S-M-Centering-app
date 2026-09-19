@@ -44,6 +44,12 @@ function createWindow() {
   // Browser-மாதிரி menu bar (File/Edit/View) தேவையில்ல, தள்ளிடுவோம்.
   Menu.setApplicationMenu(null);
 
+  // Hardening: the app window must never navigate away from the local index.html
+  // (nodeIntegration is ON, so loading any remote page here would be dangerous).
+  mainWindow.webContents.on('will-navigate', (e, url) => {
+    if (!url.startsWith('file://')) e.preventDefault();
+  });
+
   mainWindow.loadFile('index.html');
 
   // Optional: appத்த maximize பண்ணி open பண்ண வேணும்னா இத uncomment பண்ணுங்க
