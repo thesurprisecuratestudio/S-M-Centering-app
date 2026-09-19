@@ -1,6 +1,6 @@
 // main.js — Electron main process
 // இது தான் .exe double-click பண்ணும்போது run ஆகும் entry file.
-const { app, BrowserWindow, Menu } = require('electron');
+const { app, BrowserWindow, Menu, shell } = require('electron');
 const path = require('path');
 
 let mainWindow;
@@ -23,6 +23,22 @@ function createWindow() {
       contextIsolation: false,
       backgroundThrottling: false
     }
+  });
+
+  // BUGFIX: the app's "📲 WhatsApp" button (and anything else) calls
+  // window.open('https://wa.me/...', '_blank') to hand a message off to
+  // WhatsApp. Electron denies window.open by default unless the main
+  // process explicitly handles it — with no handler wired up here, every
+  // one of those calls was silently swallowed, so tapping "📲 WhatsApp"
+  // did nothing at all, with no error either. Any http(s) link the app
+  // tries to pop open now hands off to the user's normal web browser /
+  // installed WhatsApp app via shell.openExternal, instead of trying (and
+  // failing) to open inside a bare Electron window with no address bar.
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    if (/^https?:\/\//i.test(url)) {
+      shell.openExternal(url);
+    }
+    return { action: 'deny' };
   });
 
   // Browser-மாதிரி menu bar (File/Edit/View) தேவையில்ல, தள்ளிடுவோம்.
