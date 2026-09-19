@@ -1,5 +1,17 @@
 # S M Centering — Windows EXE ஆக Convert பண்றது (Electron Wrapper)
 
+## 🔐 புது Feature: Admin Login
+
+App-ல இப்போ **Login screen** வந்திருக்கு:
+
+- **முதல் தடவை open பண்ணும்போது** — Admin Username, Password, மற்றும் ஒரு **Security Code** set பண்ணச் சொல்லும் (Generate பட்டனை press பண்ணி code வாங்கிக்கோங்க). **இந்த Security Code-ஐ கண்டிப்பா வேற இடத்துல எழுதி வையுங்க** — password மறந்தா இதுதான் reset பண்ண உதவும்.
+- அடுத்தடுத்த தடவை open பண்ணும்போது Username + Password கேட்கும்.
+- Password மறந்துடீங்கன்னா, Login screen-ல **"Forgot password?"** press பண்ணி, Security Code வச்சு புது password வைக்கலாம்.
+- Login ஆனப்புறம் **👤 Profile** tab-க்குப் போய் Username, Password, Security Code மூணையும் மாத்தலாம் (ஒவ்வொரு மாற்றத்துக்கும் இப்போவைய password கேட்கும்).
+- இந்த login credentials இந்த PC-ல (`data\S_M_Centering_Data.json`) தான் save ஆகும் — password plain-text-ல அல்ல, encrypted (hashed) ஆகதான் store ஆகும்.
+
+---
+
 இந்த folder-ல உங்க `index.html` (S M Centering app) அப்படியே வச்சிருக்கேன் —
 ஒரு line கூட மாத்தல, function எதுவும் miss ஆகல. இத ஒரு **Electron** shell-ல
 wrap பண்ணி, single portable `.exe` ஆக build பண்றதுக்கு தேவையான files மட்டும்
