@@ -123,5 +123,5 @@ sm-centering-app/
   main.js                 ← Electron entry point
   package.json            ← build config (electron-builder, portable target)
   .github/workflows/build.yml  ← GitHub-ல auto build + release
-  .gitignore
+  .gitignore 
 ```
