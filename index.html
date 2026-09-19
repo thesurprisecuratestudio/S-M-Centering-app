@@ -195,6 +195,59 @@ tr:last-child td{border-bottom:none}
 </style>
 </head>
 <body>
+
+<!-- ═══════════════ LOGIN / ADMIN AUTH GATE ═══════════════ -->
+<div id="auth-overlay" class="modal" style="display:flex;align-items:center;justify-content:center;z-index:500;background:rgba(15,20,35,.92)">
+  <div class="mbox" style="max-width:420px;width:92%;padding:30px 26px;max-height:92vh;overflow-y:auto">
+
+    <!-- FIRST-RUN SETUP -->
+    <div id="auth-setup-view" style="display:none">
+      <div style="font-size:19px;font-weight:800;color:var(--tl-d);margin-bottom:4px">🔐 Create Admin Login</div>
+      <div style="font-size:12.5px;color:var(--mu);margin-bottom:18px;line-height:1.6">First time setup — இந்த details வச்சுதான் இனிமேல் software open பண்ணணும். <strong>Security Code</strong>-ஐ கண்டிப்பா வேற இடத்துல எழுதி வையுங்க — password மறந்தா இதுதான் reset பண்ண உதவும்.</div>
+      <div class="fl" style="margin-bottom:12px"><label>Admin Username</label><input id="as-user" placeholder="e.g. admin" autocomplete="off"></div>
+      <div class="fl" style="margin-bottom:12px"><label>Password</label><input id="as-pass" type="password" placeholder="Min 4 characters" autocomplete="new-password"></div>
+      <div class="fl" style="margin-bottom:12px"><label>Confirm Password</label><input id="as-pass2" type="password" placeholder="Re-enter password" autocomplete="new-password"></div>
+      <div class="fl" style="margin-bottom:6px">
+        <label>Security Code (for password reset)</label>
+        <div style="display:flex;gap:8px">
+          <input id="as-code" placeholder="Click Generate ➜" readonly style="flex:1;font-weight:800;letter-spacing:1px">
+          <button type="button" class="btn bo" style="white-space:nowrap" onclick="genSecurityCode()">🎲 Generate</button>
+        </div>
+      </div>
+      <div id="as-code-warn" style="font-size:11.5px;color:var(--er);font-weight:700;margin-bottom:14px;display:none">⚠ இந்த code-ஐ இப்போவே எழுதி வையுங்க — இது மறுபடியும் காட்டப்பட மாட்டாது!</div>
+      <div id="as-msg" style="font-size:12px;color:var(--er);font-weight:700;margin-bottom:10px;display:none"></div>
+      <button class="btn bg" style="width:100%;padding:12px" onclick="submitSetup()">✅ Create Login &amp; Continue</button>
+    </div>
+
+    <!-- LOGIN -->
+    <div id="auth-login-view" style="display:none">
+      <div style="text-align:center;margin-bottom:18px">
+        <div style="font-size:32px">🔐</div>
+        <div style="font-size:19px;font-weight:800;color:var(--tl-d)">S M Centering — Login</div>
+      </div>
+      <div class="fl" style="margin-bottom:12px"><label>Username</label><input id="al-user" placeholder="Username" autocomplete="username" onkeydown="if(event.key==='Enter'){document.getElementById('al-pass').focus();}"></div>
+      <div class="fl" style="margin-bottom:8px"><label>Password</label><input id="al-pass" type="password" placeholder="Password" autocomplete="current-password" onkeydown="if(event.key==='Enter')submitLogin();"></div>
+      <div id="al-msg" style="font-size:12px;color:var(--er);font-weight:700;margin-bottom:10px;display:none"></div>
+      <button class="btn bg" style="width:100%;padding:12px;margin-bottom:10px" onclick="submitLogin()">🔓 Login</button>
+      <div style="text-align:center"><a href="javascript:void(0)" onclick="showForgotView()" style="font-size:12.5px;color:var(--pri);font-weight:700;text-decoration:none">Forgot password?</a></div>
+    </div>
+
+    <!-- FORGOT PASSWORD -->
+    <div id="auth-forgot-view" style="display:none">
+      <div style="font-size:18px;font-weight:800;color:var(--tl-d);margin-bottom:4px">🛟 Reset Password</div>
+      <div style="font-size:12.5px;color:var(--mu);margin-bottom:16px">Setup-ல வச்ச Security Code-ஐ போட்டு புது password வையுங்க.</div>
+      <div class="fl" style="margin-bottom:12px"><label>Username</label><input id="af-user" placeholder="Username"></div>
+      <div class="fl" style="margin-bottom:12px"><label>Security Code</label><input id="af-code" placeholder="Enter your security code" style="text-transform:uppercase;letter-spacing:1px"></div>
+      <div class="fl" style="margin-bottom:12px"><label>New Password</label><input id="af-pass" type="password" placeholder="Min 4 characters"></div>
+      <div class="fl" style="margin-bottom:12px"><label>Confirm New Password</label><input id="af-pass2" type="password" placeholder="Re-enter new password"></div>
+      <div id="af-msg" style="font-size:12px;color:var(--er);font-weight:700;margin-bottom:10px;display:none"></div>
+      <button class="btn bg" style="width:100%;padding:12px;margin-bottom:10px" onclick="submitForgot()">🔁 Reset Password</button>
+      <div style="text-align:center"><a href="javascript:void(0)" onclick="showLoginView()" style="font-size:12.5px;color:var(--mu);font-weight:700;text-decoration:none">← Back to Login</a></div>
+    </div>
+
+  </div>
+</div>
+
 <div class="app">
   <aside class="sidebar">
     <div class="logo">
@@ -219,6 +272,7 @@ tr:last-child td{border-bottom:none}
       <div class="tab"    onclick="swMain('reports')">📈 Reports</div>
       <div class="tab"    onclick="swMain('backup')">🗄️ Backup</div>
       <div class="tab"    onclick="swMain('network')">🌐 Network Sync</div>
+      <div class="tab"    onclick="swMain('profile')">👤 Profile</div>
     </div>
   </aside>
 
@@ -857,6 +911,58 @@ tr:last-child td{border-bottom:none}
 
   </div>
 
+  <!-- ═══════════════ PROFILE — account settings ═══════════════ -->
+  <div id="pane-profile" class="pane">
+
+    <div class="box">
+      <div class="bh">👤 Profile — Account Settings</div>
+      <div class="note">Login username / password மற்றும் Security Code (password reset-க்கு) இங்க மாத்தலாம். எந்த மாற்றமும் பண்ண இப்போவைய password போடணும்.</div>
+      <div class="sb" style="margin-top:10px">
+        <div class="sr"><span>Current Username</span><span id="pf-username" style="font-weight:800">—</span></div>
+      </div>
+    </div>
+
+    <div class="box">
+      <div class="bh">✏️ Change Username</div>
+      <div class="g2" style="max-width:460px">
+        <div class="fl"><label>New Username</label><input id="pf-new-username" placeholder="New username"></div>
+        <div class="fl"><label>Current Password</label><input id="pf-cu-pass" type="password" placeholder="Confirm with current password"></div>
+      </div>
+      <div id="pf-user-msg" class="note" style="display:none;margin-top:8px"></div>
+      <div class="acts"><button class="btn bt" onclick="changeUsername()">💾 Update Username</button></div>
+    </div>
+
+    <div class="box">
+      <div class="bh t">🔑 Change Password</div>
+      <div class="g2" style="max-width:460px">
+        <div class="fl"><label>Current Password</label><input id="pf-cp-pass" type="password" placeholder="Current password"></div>
+        <div class="fl"></div>
+        <div class="fl"><label>New Password</label><input id="pf-np-pass" type="password" placeholder="New password (min 4 chars)"></div>
+        <div class="fl"><label>Confirm New Password</label><input id="pf-np-pass2" type="password" placeholder="Re-enter new password"></div>
+      </div>
+      <div id="pf-pass-msg" class="note" style="display:none;margin-top:8px"></div>
+      <div class="acts"><button class="btn bt" onclick="changePassword()">🔒 Update Password</button></div>
+    </div>
+
+    <div class="box" style="background:#fff5f5;border-color:#f5c2c2">
+      <div class="bh" style="color:var(--er)">🛟 Security Code (Forgot Password reset code)</div>
+      <div class="note">Password மறந்தா, Login screen-ல "Forgot password?" வழியா இந்த code வச்சு reset பண்ணலாம். இதை மாத்தணும்னா கீழ Generate பண்ணுங்க — புது code ஒரே தடவைதான் காட்டப்படும், அப்பவே எழுதி வையுங்க.</div>
+      <div class="g2" style="max-width:460px;margin-top:8px">
+        <div class="fl"><label>Current Password</label><input id="pf-sc-pass" type="password" placeholder="Current password"></div>
+      </div>
+      <div id="pf-newcode-box" style="display:none;margin:12px 0;padding:12px 14px;background:#fff;border:1px solid var(--bd);border-radius:8px;font-weight:800;font-size:16px;letter-spacing:1px;text-align:center;color:var(--tl-d)"></div>
+      <div id="pf-code-msg" class="note" style="display:none;margin-top:8px"></div>
+      <div class="acts"><button class="btn br" onclick="regenerateSecurityCode()">🎲 Generate New Security Code</button></div>
+    </div>
+
+    <div class="box">
+      <div class="bh">🚪 Log Out</div>
+      <div class="note">இந்த device-ல இருந்து logout ஆகணும்னா கீழ button press பண்ணுங்க — திரும்ப open பண்ணும்போது login screen வரும்.</div>
+      <div class="acts"><button class="btn br" onclick="doLogout()">🚪 Log Out</button></div>
+    </div>
+
+  </div>
+
 </div><!-- /wrap -->
   </div><!-- /main -->
 </div><!-- /app -->
@@ -891,6 +997,22 @@ tr:last-child td{border-bottom:none}
       <div style="display:flex;gap:10px">
         <button onclick="smClose()" class="btn br" style="flex:1">✖ Close</button>
         <button id="sm-confirm-btn" onclick="smSubmit()" class="btn bt" style="flex:2">✅ Confirm Settlement</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- EMPLOYEE DOCUMENT VIEWER MODAL -->
+<div class="modal" id="doc-view-modal">
+  <div class="mbox" style="max-width:640px">
+    <div style="padding:22px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;gap:10px">
+        <div id="doc-view-title" style="font-size:15px;font-weight:800;color:var(--tl-d)"></div>
+        <button class="btn br" style="padding:6px 12px;flex:none" onclick="closeDocView()">✖ Close</button>
+      </div>
+      <div id="doc-view-body" style="text-align:center;max-height:70vh;overflow:auto;background:#f4f5f7;border-radius:10px;padding:10px"></div>
+      <div style="margin-top:14px;display:flex;justify-content:flex-end">
+        <button id="doc-view-download-btn" class="btn bg" style="padding:8px 14px">⬇ Download</button>
       </div>
     </div>
   </div>
@@ -1395,7 +1517,12 @@ function freshDB(){
     // can re-apply this PC's real stock changes on top of the Server's
     // fresher copy instead of silently losing them. Cleared once a push
     // to the Server succeeds. See updateInv().
-    pendingInvDeltas: {}
+    pendingInvDeltas: {},
+    // Local admin login (username/password + a Security Code for password
+    // reset). null until the first-run Setup screen creates it — see the
+    // AUTH / LOGIN SYSTEM section below. Never stores plain-text secrets,
+    // only salted PBKDF2 hashes.
+    auth: null
   };
 }
 function loadDB(){
@@ -1434,6 +1561,166 @@ function saveDB(){
 }
 
 function fmt(v){ return Number(v||0).toLocaleString('en-IN'); }
+
+// ══════════════════════════════════════════════════════════════
+// AUTH / LOGIN SYSTEM — local admin username + password gate, with
+// a Security Code fallback for password reset (there's no email/SMS
+// possible in an offline desktop app, so a self-set recovery code is
+// the only way back in if the password is forgotten). Credentials are
+// never stored in plain text — only salted PBKDF2 hashes (via Node's
+// crypto module, the same module already used for file storage) are
+// kept in DB.auth. The overlay (#auth-overlay) sits above the whole
+// app and is only hidden after a successful login or first-run setup.
+// ══════════════════════════════════════════════════════════════
+var __nodeCrypto = null;
+try{ if(typeof require==='function') __nodeCrypto = require('crypto'); }catch(e){ __nodeCrypto=null; }
+function __randHex(n){
+  if(__nodeCrypto) return __nodeCrypto.randomBytes(n).toString('hex');
+  // Fallback only if this somehow runs outside Electron/Node (e.g. a
+  // plain browser tab) — weaker, but keeps the screen from hard-crashing.
+  var s=''; for(var i=0;i<n*2;i++) s+=Math.floor(Math.random()*16).toString(16);
+  return s;
+}
+function __hashSecret(secret, saltHex){
+  if(__nodeCrypto) return __nodeCrypto.pbkdf2Sync(String(secret), saltHex, 100000, 32, 'sha256').toString('hex');
+  var s=String(secret)+saltHex, h=0;
+  for(var i=0;i<s.length;i++){ h=((h<<5)-h+s.charCodeAt(i))|0; }
+  return 'weak'+Math.abs(h).toString(16);
+}
+function __makeCode(){
+  // 8 chars, grouped XXXX-XXXX, no ambiguous 0/O/1/I so it's easy to
+  // read back from handwriting.
+  var chars='ABCDEFGHJKLMNPQRSTUVWXYZ23456789', c='';
+  for(var i=0;i<8;i++){ c+=chars.charAt(Math.floor(Math.random()*chars.length)); if(i===3) c+='-'; }
+  return c;
+}
+function genSecurityCode(){
+  var code=__makeCode();
+  el('as-code').value=code;
+  el('as-code-warn').style.display='block';
+  return code;
+}
+function __authMsg(id,text){ var e=el(id); if(!e) return; e.textContent='⚠ '+text; e.style.display='block'; }
+function __authMsgHide(id){ var e=el(id); if(e) e.style.display='none'; }
+
+function authGateShow(){
+  var setupDone = !!(DB.auth && DB.auth.hash);
+  el('auth-overlay').style.display='flex';
+  el('auth-setup-view').style.display = setupDone ? 'none' : 'block';
+  el('auth-login-view').style.display = setupDone ? 'block' : 'none';
+  el('auth-forgot-view').style.display = 'none';
+  if(setupDone){ el('al-user').value=''; el('al-pass').value=''; __authMsgHide('al-msg'); }
+  else { el('as-user').value=''; el('as-pass').value=''; el('as-pass2').value=''; el('as-code').value=''; el('as-code-warn').style.display='none'; __authMsgHide('as-msg'); }
+}
+function authGateHide(){ el('auth-overlay').style.display='none'; }
+function showLoginView(){
+  el('auth-login-view').style.display='block';
+  el('auth-forgot-view').style.display='none';
+  __authMsgHide('al-msg');
+}
+function showForgotView(){
+  el('auth-login-view').style.display='none';
+  el('auth-forgot-view').style.display='block';
+  el('af-user').value = el('al-user') ? el('al-user').value : '';
+  el('af-code').value=''; el('af-pass').value=''; el('af-pass2').value='';
+  __authMsgHide('af-msg');
+}
+
+function submitSetup(){
+  var user=val('as-user'), pass=el('as-pass').value, pass2=el('as-pass2').value, code=(el('as-code').value||'').trim();
+  if(!user){ __authMsg('as-msg','Username போடுங்க'); return; }
+  if(!pass || pass.length<4){ __authMsg('as-msg','Password குறைந்தது 4 characters இருக்கணும்'); return; }
+  if(pass!==pass2){ __authMsg('as-msg','Password match ஆகல'); return; }
+  if(!code){ __authMsg('as-msg','Security Code Generate பண்ணுங்க'); return; }
+  var pSalt=__randHex(16), cSalt=__randHex(16);
+  DB.auth = {
+    user:user, pSalt:pSalt, hash:__hashSecret(pass,pSalt),
+    cSalt:cSalt, codeHash:__hashSecret(code.toUpperCase(),cSalt)
+  };
+  saveDB();
+  toast('✅ Admin login created!');
+  authGateHide();
+}
+function submitLogin(){
+  var user=val('al-user'), pass=el('al-pass').value;
+  if(!DB.auth || !DB.auth.hash){ authGateShow(); return; }
+  if(!user||!pass){ __authMsg('al-msg','Username & Password இரண்டையும் போடுங்க'); return; }
+  if(user.toLowerCase()!==String(DB.auth.user||'').trim().toLowerCase() || __hashSecret(pass,DB.auth.pSalt)!==DB.auth.hash){
+    __authMsg('al-msg','Username அல்லது Password தப்பா இருக்கு'); return;
+  }
+  el('al-pass').value='';
+  authGateHide();
+}
+function submitForgot(){
+  var user=val('af-user'), code=val('af-code'), pass=el('af-pass').value, pass2=el('af-pass2').value;
+  if(!DB.auth || !DB.auth.codeHash){ __authMsg('af-msg','Security Code set பண்ணல'); return; }
+  if(user.toLowerCase()!==String(DB.auth.user||'').trim().toLowerCase()){ __authMsg('af-msg','Username தப்பு'); return; }
+  if(!code){ __authMsg('af-msg','Security Code போடுங்க'); return; }
+  if(__hashSecret(code.toUpperCase(),DB.auth.cSalt)!==DB.auth.codeHash){ __authMsg('af-msg','Security Code தப்பு'); return; }
+  if(!pass || pass.length<4){ __authMsg('af-msg','புது Password குறைந்தது 4 characters இருக்கணும்'); return; }
+  if(pass!==pass2){ __authMsg('af-msg','Password match ஆகல'); return; }
+  var pSalt=__randHex(16);
+  DB.auth.pSalt=pSalt; DB.auth.hash=__hashSecret(pass,pSalt);
+  saveDB();
+  toast('✅ Password reset ஆயிடுச்சு! இப்போ login பண்ணுங்க');
+  showLoginView();
+  el('al-user').value=DB.auth.user;
+}
+function doLogout(){
+  if(!confirm('Logout ஆகணுமா?')) return;
+  authGateShow();
+}
+
+// ── PROFILE TAB (change username/password/security code) ──────
+function renderProfile(){
+  if(!DB.auth) return;
+  el('pf-username').textContent = DB.auth.user||'—';
+  ['pf-new-username','pf-cu-pass','pf-cp-pass','pf-np-pass','pf-np-pass2','pf-sc-pass'].forEach(function(id){ if(el(id)) el(id).value=''; });
+  __authMsgHide('pf-user-msg'); __authMsgHide('pf-pass-msg'); __authMsgHide('pf-code-msg');
+  var box=el('pf-newcode-box'); if(box){ box.style.display='none'; box.textContent=''; }
+}
+function __pfMsg(id,text,ok){
+  var e=el(id); if(!e) return;
+  e.textContent=(ok?'✅ ':'⚠ ')+text;
+  e.style.color= ok?'var(--ok)':'var(--er)';
+  e.style.display='block';
+}
+function changeUsername(){
+  var newUser=val('pf-new-username'), curPass=el('pf-cu-pass').value;
+  if(!newUser){ __pfMsg('pf-user-msg','New username போடுங்க',false); return; }
+  if(!curPass || __hashSecret(curPass,DB.auth.pSalt)!==DB.auth.hash){ __pfMsg('pf-user-msg','Current password தப்பு',false); return; }
+  DB.auth.user=newUser;
+  saveDB();
+  __pfMsg('pf-user-msg','Username update ஆயிடுச்சு: '+newUser,true);
+  renderProfile();
+}
+function changePassword(){
+  var curPass=el('pf-cp-pass').value, newPass=el('pf-np-pass').value, newPass2=el('pf-np-pass2').value;
+  if(!curPass || __hashSecret(curPass,DB.auth.pSalt)!==DB.auth.hash){ __pfMsg('pf-pass-msg','Current password தப்பு',false); return; }
+  if(!newPass || newPass.length<4){ __pfMsg('pf-pass-msg','புது Password குறைந்தது 4 characters இருக்கணும்',false); return; }
+  if(newPass!==newPass2){ __pfMsg('pf-pass-msg','புது Password match ஆகல',false); return; }
+  var pSalt=__randHex(16);
+  DB.auth.pSalt=pSalt; DB.auth.hash=__hashSecret(newPass,pSalt);
+  saveDB();
+  __pfMsg('pf-pass-msg','Password update ஆயிடுச்சு',true);
+  renderProfile();
+}
+function regenerateSecurityCode(){
+  var curPass=el('pf-sc-pass').value;
+  if(!curPass || __hashSecret(curPass,DB.auth.pSalt)!==DB.auth.hash){ __pfMsg('pf-code-msg','Current password தப்பு',false); return; }
+  var code=__makeCode();
+  var cSalt=__randHex(16);
+  DB.auth.cSalt=cSalt; DB.auth.codeHash=__hashSecret(code.toUpperCase(),cSalt);
+  saveDB();
+  var box=el('pf-newcode-box'); box.style.display='block'; box.textContent='🔑 '+code;
+  __pfMsg('pf-code-msg','புது Security Code உருவாச்சு — இப்பவே எழுதி வையுங்க, திரும்ப காட்டப்பட மாட்டாது!',true);
+  el('pf-sc-pass').value='';
+}
+// Show the login/setup gate as soon as this script runs. The script tag is
+// placed after the overlay's HTML in the document, so the elements it
+// needs already exist — no need to wait for the window 'load' event (that
+// would let the rest of the app flash on screen for a moment first).
+authGateShow();
 
 // ══════════════════════════════════════════════════════════════
 // NETWORK SYNC (2 PC / multiple PC — WiFi or LAN, live sync)
@@ -1929,15 +2216,27 @@ function apiGetPending(){
   // "Outstanding Payments" table all read only from DB.sales/DB.returns, so
   // an OPEN site could owe thousands of rupees and everything would still
   // show ₹0 outstanding. Open sites with a balance due are now included too.
-  var siteRows = (DB.sites||[]).filter(function(s){ return s.status==='OPEN'; }).map(function(s){
+  var siteAllRows = (DB.sites||[]).filter(function(s){ return s.status==='OPEN'; }).map(function(s){
     return {site:s, totals:computeSiteTotals(s)};
-  }).filter(function(x){ return x.totals.balanceDue>0; })
+  });
+  var siteRows = siteAllRows.filter(function(x){ return x.totals.balanceDue>0; })
     .sort(function(a,b){ return b.totals.balanceDue-a.totals.balanceDue; });
   var site = siteRows.map(function(x){
     return {billNo:x.site.site_no,siteId:x.site.id,customer:x.site.customer,phone:x.site.phone,balance:x.totals.balanceDue,type:'SITE',overdue:false};
   });
+  // BUGFIX: sites that overpaid (refundDue>0) were completely absent from
+  // this function's output — not in "pending" (correctly, since nothing
+  // is owed BY the customer) but also not in "refunds", which is exactly
+  // where a negative-balance dispatch/return bill already shows up. So a
+  // site refund never appeared in the "🟡 REFUND DUE TO CUSTOMER" panel at
+  // all, unlike the equivalent dispatch/return case just below.
+  var siteRefundRows = siteAllRows.filter(function(x){ return x.totals.refundDue>0; })
+    .sort(function(a,b){ return b.totals.refundDue-a.totals.refundDue; });
+  var siteRefunds = siteRefundRows.map(function(x){
+    return {billNo:x.site.site_no,siteId:x.site.id,customer:x.site.customer,phone:x.site.phone,balance:-x.totals.refundDue,type:'SITE'};
+  });
   var all = disp.concat(ret).concat(site);
-  return {pending:all, refunds:ref, total: all.reduce(function(s,x){return s+x.balance;},0), count:all.length};
+  return {pending:all, refunds:ref.concat(siteRefunds), total: all.reduce(function(s,x){return s+x.balance;},0), count:all.length};
 }
 
 function apiAddOrder(data){
@@ -1946,25 +2245,11 @@ function apiAddOrder(data){
   // limits quantity to available stock, but re-checking here means a bad
   // or stale value can never push out_qty past what's actually on hand.
   var stockAll = getStockData('MAIN').concat(getStockData('SUB'));
-  // BUGFIX (wrong item amounts on any bill mixing "Daily" and "1 Month +
-  // Extra Days" products): this used to recompute EVERY item's amount
-  // using data.calcType — a single bill-level flag that is 'monthly' if
-  // ANY item on the bill is monthly. So on a mixed bill, a plain Daily
-  // item got recalculated as if it were Monthly (using its empty/zero
-  // month rate), collapsing its stored amount to near-zero — while the
-  // bill's overall Total (data.total, computed correctly per-item back in
-  // buildDObj) stayed right. Net effect: the bill printed fine the moment
-  // it was created (from the in-memory object), but re-opening the same
-  // bill later from Search Bills showed item amounts that didn't add up
-  // to the Total Rental. Fix: derive each item's OWN calc type from its
-  // own `type` field (set per-product when the bill was built), exactly
-  // like mkHTML() already does for display — never the bill-level flag.
   items = items.map(function(it){
     var s = stockAll.find(function(x){ return x.name.trim().toLowerCase()===(it.name||'').trim().toLowerCase(); });
     var avail = s ? s.available : (Number(it.qty)||0);
     var clampedQty = Math.max(0, Math.min(Number(it.qty)||0, avail));
-    var itemCtype = it.type==='1 month + extra days' ? 'monthly' : 'daily';
-    return Object.assign({}, it, { qty: clampedQty, amount: calcItemAmount(clampedQty, Number(data.days)||1, Number(it.price)||0, Number(it.monthPrice)||0, itemCtype) });
+    return Object.assign({}, it, { qty: clampedQty, amount: calcItemAmount(clampedQty, Number(data.days)||1, Number(it.price)||0, Number(it.monthPrice)||0, data.calcType||'daily') });
   }).filter(function(it){ return it.qty>0; });
   var sale = {
     id: DB._sid++, bill_no:data.billNo, customer:data.customer, phone:data.phone, address:data.address||'',
@@ -1983,36 +2268,6 @@ function apiAddOrder(data){
 function apiAddReturn(data){
   var items = data.items||[];
   var fb = Number(data.finalBalance)||0;
-  var orig = DB.sales.find(function(s){ return s.bill_no===data.originalBillNo; });
-  // BUGFIX (defense-in-depth, mirrors apiSettleMissingItems' clamp): a UI
-  // bug (now fixed — see fillRet()/resetRForm()) could previously leave a
-  // leftover qty from a PREVIOUS return's item sitting in the form, so a
-  // return for THIS bill could be submitted carrying a product that was
-  // never even dispatched on it — crediting in_qty for stock that was
-  // never taken out, and billing an amount that was never owed. Never
-  // trust the submitted item list on its own: drop any item that isn't on
-  // the original bill at all, and cap every item's qty to what's actually
-  // still outstanding (dispatched minus already returned across every
-  // earlier return of this same bill) — the same "actual missing" math
-  // apiGetReturns()/apiSettleMissingItems() already use elsewhere.
-  if(orig && orig.items){
-    var returnedByProduct={};
-    DB.returns.filter(function(x){ return x.original_bill_no===data.originalBillNo; }).forEach(function(x){
-      (x.items||[]).forEach(function(i){
-        var key=(i.product||'').trim().toLowerCase();
-        returnedByProduct[key]=(returnedByProduct[key]||0)+(Number(i.qty)||0);
-      });
-    });
-    items = items.map(function(item){
-      var key=(item.name||'').trim().toLowerCase();
-      var si = orig.items.find(function(x){ return x.product.trim().toLowerCase()===key; });
-      if(!si) return Object.assign({}, item, {qty:0}); // not part of this bill at all — drop it
-      var dispatched = Number(si.qty)||0;
-      var alreadyReturned = returnedByProduct[key]||0;
-      var stillOutstanding = Math.max(0, dispatched-alreadyReturned);
-      return Object.assign({}, item, {qty: Math.min(Number(item.qty)||0, stillOutstanding)});
-    }).filter(function(item){ return item.qty>0; });
-  }
   var ret = {
     id: DB._rid++, return_bill_no:data.returnBillNo, original_bill_no:data.originalBillNo,
     customer:data.customer, phone:data.phone, return_date: data.returnDate || new Date().toISOString(),
@@ -2024,6 +2279,7 @@ function apiAddReturn(data){
   };
   DB.returns.push(ret);
   items.forEach(function(it){ updateInv(it.name, it.group||'MAIN', 'in_qty', Number(it.qty)||0); });
+  var orig = DB.sales.find(function(s){ return s.bill_no===data.originalBillNo; });
   if(orig){
     // The return recalculates the true rental cost for the actual duration and
     // tracks its own final_balance as the authoritative amount still owed for
@@ -2295,7 +2551,22 @@ function computeSiteTotals(site){
     byProduct:byProduct, totalDispatched:totalDispatched, totalReturned:totalReturned, totalPending:totalPending,
     totalMissingQty:totalMissingQty, totalLostQty:totalLostQty,
     totalRentSettled:totalRentSettled, totalRentProvisional:totalRentProvisional, totalMissingRentProvisional:totalMissingRentProvisional,
-    grandRent:grandRent, totalPayments:totalPayments, balanceDue:Math.max(0,grandRent-totalPayments)
+    grandRent:grandRent, totalPayments:totalPayments, balanceDue:Math.max(0,grandRent-totalPayments),
+    // BUGFIX: Site Ledger had no way to represent a customer refund. If
+    // payments collected on a site (advances, or payments taken against a
+    // running estimate) end up exceeding the final rent actually owed —
+    // a normal occurrence once material is actually returned and the
+    // estimate is replaced by the real figure — balanceDue was clamped to
+    // 0 with nothing to show the difference. Every screen that reads
+    // balanceDue (site header, Full Site Bill, its PDF/WhatsApp share,
+    // Dashboard/Reports outstanding totals, Excel export, and the site's
+    // own "Settle Payment" screen) then displayed either ₹0 or "No balance
+    // due", silently hiding money the business owner actually owes back to
+    // the customer — even though the app already has this exact concept
+    // (and its own "REFUND DUE TO CUSTOMER" panel) for regular dispatch/
+    // return bills. refundDue now carries that difference so callers can
+    // surface it the same way.
+    refundDue:Math.max(0,totalPayments-grandRent)
   };
 }
 function nextMissingId(site){ var maxId=(site.missingItems||[]).reduce(function(m,x){return Math.max(m,x.id);},0); return maxId+1; }
@@ -2498,15 +2769,30 @@ function apiUploadXL(invMain, invSub){
   return {status:'ok', message:'Inventory synced ✅'};
 }
 function apiGetExcelData(){
+  // BUGFIX: the Returns sheet has always had a "Missing Items" column, but
+  // it was never actually filled in — dlXL() just wrote '' for every row.
+  // missingItems isn't stored on the raw DB.returns record itself (it's
+  // computed on the fly, cumulatively across all partial returns of the
+  // same bill) — apiGetReturns() already does that computation correctly,
+  // it just wasn't being reused here. Compute it once and merge it in by
+  // return_bill_no so the export actually reports what's still missing.
+  var missByBillNo={};
+  apiGetReturns().forEach(function(r){ missByBillNo[r.returnBillNo]=r.missingItems||[]; });
   return {
     sales: DB.sales.map(function(s){ return Object.assign({},s,{sale_items:s.items||[], items_summary:(s.items||[]).map(function(i){return i.product+'×'+i.qty;}).join(', ')}); }),
-    returns: DB.returns.map(function(r){ return Object.assign({},r,{return_items:r.items||[], items_summary:(r.items||[]).map(function(i){return i.product+'×'+i.qty;}).join(', ')}); }),
+    returns: DB.returns.map(function(r){ return Object.assign({},r,{return_items:r.items||[], items_summary:(r.items||[]).map(function(i){return i.product+'×'+i.qty;}).join(', ')}, {missing_items:missByBillNo[r.return_bill_no]||[]}); }),
     invMain: DB.invMain,
     invSub: DB.invSub,
     // BUGFIX: the Excel export previously had no record of Site Ledger data
     // at all — every site's rent, payments, and balance due were completely
     // absent from the business owner's own accounting export.
-    sites: (DB.sites||[]).map(function(s){ var t=computeSiteTotals(s); return {site_no:s.site_no, customer:s.customer, phone:s.phone, address:s.address||'', status:s.status, created_at:s.created_at, grandRent:t.grandRent, totalPayments:t.totalPayments, balanceDue:t.balanceDue}; })
+    // BUGFIX: refundDue (payments collected exceeding rent owed — see
+    // computeSiteTotals) was left out of this mapping, so a site the
+    // business actually owes money back to still exported with
+    // "Balance Due: 0" and no sign of the refund anywhere in the sheet,
+    // same gap that was already fixed on every other site-balance screen
+    // (Full Site Bill, its PDF/WhatsApp share, Settle Payment).
+    sites: (DB.sites||[]).map(function(s){ var t=computeSiteTotals(s); return {site_no:s.site_no, customer:s.customer, phone:s.phone, address:s.address||'', status:s.status, created_at:s.created_at, grandRent:t.grandRent, totalPayments:t.totalPayments, balanceDue:t.balanceDue, refundDue:t.refundDue}; })
   };
 }
 
@@ -2541,21 +2827,8 @@ function nowDT(){var n=new Date();n.setMinutes(n.getMinutes()-n.getTimezoneOffse
 // return with the wrong original bill. newBN() is now backed by a
 // dedicated persistent counter (DB._bnid) that can never repeat.
 function newBN(){
-  // Extra safety net: DB._bnid is a monotonically-increasing counter and
-  // placeD()/placeR() already sync with the Server first (see
-  // netSyncBeforeCommit) specifically so two PCs never generate the same
-  // number. But if two people on two PCs somehow still click "Save" in the
-  // exact same instant (before either push completes), or an older backup
-  // gets restored and briefly disagrees with the live counter, double-check
-  // the generated number isn't already used by an existing bill/return and
-  // keep incrementing until it's actually free — so a real collision can
-  // never silently merge two different bills under one number.
-  var bn;
-  do{
-    DB._bnid = (Number(DB._bnid)||0) + 1;
-    bn = 'SMC-'+String(DB._bnid).padStart(6,'0');
-  } while(DB.sales.some(function(s){return s.bill_no===bn;}) || DB.returns.some(function(r){return r.return_bill_no===bn;}));
-  return bn;
+  DB._bnid = (Number(DB._bnid)||0) + 1;
+  return 'SMC-'+String(DB._bnid).padStart(6,'0');
 }
 function fdt(s){
   if(!s)return '—';
@@ -2739,9 +3012,24 @@ function computeSiteDueAlerts(days,now){
     if(!candidates.length) return;
     var totals=computeSiteTotals(site);
     candidates.forEach(function(b){
+      // BUGFIX (site due-alert double counting): this used to cap each
+      // batch's pending qty against the PRODUCT-WIDE total pending
+      // (Math.min(p.pending, it.qty)) instead of what's actually still
+      // outstanding from THIS specific batch. When a site had two+ OUT
+      // batches of the same product with different expected-return dates,
+      // and some of that product had already been returned/marked missing
+      // (so product-wide pending < sum of the batches' own quantities),
+      // every batch's alert still showed up to its own full original qty
+      // as "pending" — overstating (and effectively double-counting) the
+      // same remaining stock across multiple alert entries. Each out lot
+      // in totals.byProduct[].lots is tagged with the date of the batch it
+      // came from and already reflects FIFO-consumed returns/missing, so
+      // matching on that date gives the true remaining qty for this batch.
       var batchPending=(b.items||[]).reduce(function(sum,it){
         var p=totals.byProduct[(it.product||'').trim().toLowerCase()];
-        return sum + (p ? Math.min(p.pending, it.qty) : 0);
+        if(!p) return sum;
+        var lot=p.lots.find(function(l){ return l.date===b.date; });
+        return sum + (lot ? Math.min(lot.qty, it.qty) : 0);
       },0);
       if(batchPending<=0) return;
       var daysLeft=Math.round((new Date(b.expected_return)-now)/86400000);
@@ -2850,7 +3138,7 @@ window.addEventListener('load',function(){
 });
 
 // ── MAIN TAB SWITCH ───────────────────────────────────────────
-var TAB_ORDER=['dashboard','smallc','sites','stock','customers','employees','attendance','payroll','expenses','income','maintenance','reports','backup','network'];
+var TAB_ORDER=['dashboard','smallc','sites','stock','customers','employees','attendance','payroll','expenses','income','maintenance','reports','backup','network','profile'];
 var curDRSub='dispatch';
 function swMain(t){
   TAB_ORDER.forEach(function(n,i){
@@ -2870,6 +3158,7 @@ function swMain(t){
   if(t==='maintenance') renderMaintenance();
   if(t==='reports') renderReportTabs();
   if(t==='network') netRenderPanelUI();
+  if(t==='profile') renderProfile();
 }
 
 // ── SMALL CONSTRUCTION — 4 sub-sections living inside one main tab ──
@@ -3320,25 +3609,6 @@ function resetDForm(){
   el('d-out').value='';el('d-in').value='';el('d-adv').value='';
   ALL_PRODUCTS.forEach(function(p){ dQty[p.id]=0; dPrice[p.id]=0; dCalcType[p.id]='daily'; });
   buildD();
-  // BUGFIX (stale item carrying over into the next dispatch bill): buildD()
-  // deliberately restores whatever qty/rate/calc-type was in each input
-  // BEFORE it last rebuilt the table — that's needed so a background
-  // stock refresh (loadStock() calls buildD() constantly) never wipes out
-  // what the operator is mid-way typing. But that same "restore" step ran
-  // right here too, after a bill was just placed, silently bringing back
-  // the PREVIOUS bill's qty/rate for every product — even ones that had
-  // nothing to do with the new bill about to be created. The next
-  // dispatch could then go out with leftover quantities of a product the
-  // operator never touched. Force every input back to empty/zero here,
-  // AFTER buildD()'s restore has already run, so a fresh bill always
-  // starts from a truly blank table.
-  ALL_PRODUCTS.forEach(function(p){
-    var qEl=el('dq-'+p.id); if(qEl) qEl.value=0;
-    var pEl=el('dp-'+p.id); if(pEl) pEl.value='';
-    var mEl=el('dm-'+p.id); if(mEl) mEl.value='';
-    var cEl=el('d-ctype-'+p.id); if(cEl) cEl.value='daily';
-  });
-  calcD();
 }
 function resetRForm(){
   el('r-bill').value='';el('r-name').value='';el('r-phone').value='';
@@ -3348,29 +3618,6 @@ function resetRForm(){
   el('r-back').value=td();
   if(el('r-back-time')) el('r-back-time').value=nowHM();
   buildR();
-  // BUGFIX (same story as resetDForm() above, for Returns — and higher
-  // stakes here): buildR() restores each input's PRE-rebuild value so a
-  // background stock refresh never erases what's being typed. Called
-  // right after a return is placed, that same restore brought back the
-  // just-returned bill's qty/rate/month-rate for every product — with
-  // rq-*'s `max` attribute still left at the OLD bill's dispatched qty.
-  // The moment the operator searched a completely different bill next,
-  // fillRet()'s branch for a product NOT on that bill only zeroed the
-  // in-memory rQty/rDispatched — it never touched these leftover DOM
-  // values — and calcR() re-reads qty straight from the input on every
-  // call, silently restoring rQty right back to the stale amount. A
-  // second bill's return could then go out carrying a phantom item that
-  // was never even dispatched on it: crediting stock that was never
-  // taken out, and adding an amount to the bill that was never owed.
-  // Force every input to a true blank/zero state here too.
-  ALL_PRODUCTS.forEach(function(p){
-    var qEl=el('rq-'+p.id); if(qEl){qEl.value=0; qEl.max=0;}
-    var pEl=el('rp-'+p.id); if(pEl) pEl.value='';
-    var moEl=el('rmo-'+p.id); if(moEl) moEl.value='';
-    var cEl=el('r-ctype-'+p.id); if(cEl) cEl.value='daily';
-    var mEl=el('rm-'+p.id); if(mEl){mEl.textContent='—'; mEl.style.color='var(--mu)';}
-    var dEl=el('rd-'+p.id); if(dEl) dEl.textContent='—';
-  });
   calcR();
 }
 
@@ -3504,7 +3751,14 @@ function renderSiteWorkspace(){
         '<div class="sr"><span>Total Rent (settled + running)</span><span style="font-weight:800">₹'+fmt(t.grandRent)+'</span></div>'+
         (t.totalMissingQty>0 ? '<div class="sr"><span style="color:var(--er)">⚠️ Missing (unresolved)</span><span style="color:var(--er)">'+t.totalMissingQty+' pcs — ₹'+fmt(t.totalMissingRentProvisional)+' running</span></div>' : '')+
         '<div class="sr"><span>Total Payments Collected</span><span style="color:green">₹'+fmt(t.totalPayments)+'</span></div>'+
+        // BUGFIX: this is the main balance summary shown every time a site
+        // is opened, but it only ever showed Balance Due (clamped to 0 by
+        // computeSiteTotals when payments exceed rent) — the same refund
+        // gap already fixed on the Full Site Bill, its PDF/WhatsApp share,
+        // Settle Payment, and the Excel export, just missed here on the
+        // actual site page itself.
         '<div class="sgrand"><span>Balance Due</span><span>₹'+fmt(t.balanceDue)+'</span></div>'+
+        (t.refundDue>0 ? '<div class="sr" style="margin-top:6px"><span style="color:#7c3aed;font-weight:700">🟡 Refund Due to Customer</span><span style="color:#7c3aed;font-weight:800">₹'+fmt(t.refundDue)+'</span></div>' : '')+
       '</div>'+
       '<div class="acts">'+
         '<button class="btn bt" onclick="siteSettlePayment()">💳 Collect Payment / Advance</button>'+
@@ -3691,6 +3945,7 @@ function previewSiteOut(){
     '<div class="sr"><span>Total Rent After This Batch (settled + running)</span><span style="font-weight:800">₹'+fmt(t.grandRent)+'</span></div>'+
     '<div class="sr"><span>Total Payments Collected So Far</span><span style="color:green">₹'+fmt(t.totalPayments)+'</span></div>'+
     '<div class="sgrand"><span>Balance Due After This Batch</span><span>₹'+fmt(t.balanceDue)+'</span></div>'+
+    (t.refundDue>0 ? '<div class="sr" style="margin-top:6px"><span style="color:#7c3aed;font-weight:700">🟡 Refund Due to Customer</span><span style="color:#7c3aed;font-weight:800">₹'+fmt(t.refundDue)+'</span></div>' : '')+
   '</div>';
 }
 function previewSiteIn(){
@@ -3734,6 +3989,7 @@ function previewSiteIn(){
     '<div class="sr"><span>Payment Collected Now</span><span style="color:green">₹'+fmt(pay)+'</span></div>'+
     '<div class="sr"><span>Total Rent After This Return (site-wide)</span><span style="font-weight:800">₹'+fmt(after.grandRent)+'</span></div>'+
     '<div class="sgrand"><span>Balance Due After This Return</span><span>₹'+fmt(after.balanceDue)+'</span></div>'+
+    (after.refundDue>0 ? '<div class="sr" style="margin-top:6px"><span style="color:#7c3aed;font-weight:700">🟡 Refund Due to Customer</span><span style="color:#7c3aed;font-weight:800">₹'+fmt(after.refundDue)+'</span></div>' : '')+
   '</div>';
 }
 // BUGFIX: splitting one fixed missing-item amount proportionally across
@@ -3779,6 +4035,7 @@ function previewSiteMissing(){
       ? '<div class="sr"><span>Fixed Amount Charged Now</span><span style="font-weight:800;color:var(--er)">₹'+fmt(chargeNow)+'</span></div>'
       : '<div class="sr"><span>Note</span><span style="font-size:12px;color:var(--mu)">Keeps accruing daily rent until resolved</span></div>')+
     '<div class="sgrand"><span>Balance Due After This</span><span>₹'+fmt(t.balanceDue)+'</span></div>'+
+    (t.refundDue>0 ? '<div class="sr" style="margin-top:6px"><span style="color:#7c3aed;font-weight:700">🟡 Refund Due to Customer</span><span style="color:#7c3aed;font-weight:800">₹'+fmt(t.refundDue)+'</span></div>' : '')+
   '</div>';
 }
 // ── SITE LEDGER — per-batch Preview Bill / Place & PDF (mirrors dispatch/return) ──
@@ -4088,6 +4345,12 @@ function viewSiteFullBill(){
       (t.totalMissingQty>0 ? '<div style="color:#dc2626"><strong>⚠️ Missing (unresolved):</strong> '+t.totalMissingQty+' pcs — ₹'+fmt(t.totalMissingRentProvisional)+' running</div>' : '')+
       '<div style="color:#16a34a"><strong>Total Payments Collected:</strong> ₹'+fmt(t.totalPayments)+'</div>'+
       '<div style="color:#dc2626;font-weight:800"><strong>Balance Due:</strong> ₹'+fmt(t.balanceDue)+'</div>'+
+      // BUGFIX: the Full Site Bill never had any way to show a refund —
+      // if payments collected exceeded the rent owed it just showed
+      // "Balance Due: ₹0" like a normally-settled site, with the actual
+      // refund owed back to the customer invisible on the one document
+      // meant to be this site's complete, authoritative statement.
+      (t.refundDue>0 ? '<div style="color:#7c3aed;font-weight:800"><strong>🟡 Refund Due to Customer:</strong> ₹'+fmt(t.refundDue)+'</div>' : '')+
     '</div></div>';
   el('bill-content').innerHTML=html;
   curMode='sitefull';
@@ -4138,6 +4401,14 @@ function downloadSiteFullBill(){
   doc.setTextColor(40,40,40); doc.text('Total Rent (settled + running): Rs '+fmt(t.grandRent),14,y); y+=8;
   doc.setTextColor(22,163,74); doc.text('Total Payments Collected     : Rs '+fmt(t.totalPayments),14,y); y+=8;
   doc.setTextColor(220,38,38); doc.text('Balance Due                  : Rs '+fmt(t.balanceDue),14,y); y+=12;
+  // BUGFIX: same gap as the on-screen Full Site Bill (viewSiteFullBill) —
+  // this downloaded/printed statement never showed a refund either, so
+  // the one document a customer might actually keep as proof could say
+  // "Balance Due: Rs 0" while the business still owed them money.
+  if(t.refundDue>0){
+    doc.setFont('helvetica','bold'); doc.setTextColor(124,58,237);
+    doc.text('Refund Due to Customer       : Rs '+fmt(t.refundDue),14,y); y+=12;
+  }
   doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(120,120,120);
   doc.text('Thank you for choosing '+COMPANY+'.',14,y);
   doc.save(site.site_no+'_FullStatement.pdf');
@@ -4194,7 +4465,7 @@ function downloadSiteMissingBill(){
   doc.save(site.site_no+'_MissingItemsBill.pdf');
   toast('✅ Missing items bill downloaded!');
 }
-function submitSiteOut(){
+async function submitSiteOut(){
   var date=val('so-date')||td();
   var expRet=val('so-expret')||'';
   var items=[];
@@ -4207,12 +4478,26 @@ function submitSiteOut(){
   if(!items.length){ toast('⚠ குறைந்தது ஒரு quantity போடுங்க'); return; }
   var bad=items.find(function(i){ return i.calcType==='monthly' ? i.monthPrice<=0 : i.price<=0; });
   if(bad){ toast('⚠ '+bad.name+'-க்கு rate போடுங்க'); return; }
+  // BUGFIX (network sync — site batch id collision): outBatches/inBatches/
+  // payments ids are assigned as "current array length + 1". Two PCs adding
+  // a batch to the SAME site while briefly out of sync can independently
+  // compute the SAME id (e.g. both add the 3rd OUT batch and both get id
+  // 3). netMergeAndRetry() matches sub-list records by id, so on the next
+  // conflict merge the second PC's genuinely different batch is mistaken
+  // for "already have this id" and silently dropped — a real dispatch
+  // vanishes with no error. Dispatch/return bills avoid this exact failure
+  // by syncing with the Server FIRST (see placeD/placeR) so their id
+  // counter is always the Server's true latest before it's used; do the
+  // same here before reading outBatches.length so the id we compute
+  // reflects the freshest state.
+  await netSyncBeforeCommit();
   var site=findSiteById(curSiteId);
   // Capture the batch number BEFORE the API call pushes the new batch —
   // otherwise the receipt shows one batch number higher than what's saved.
   var batchNo=(site.outBatches||[]).length+1;
   var r=apiAddSiteOut(curSiteId, date, items, expRet);
   if(r.status==='ok'){
+    if(NET.mode==='client' && NET.connected) netPushState(); // push this batch immediately, don't wait for the debounce
     toast('✅ OUT batch added! Generating PDF…');
     curBill=buildSiteOutBillObj(site,date,items,batchNo); curMode='dispatch';
     el('bill-content').innerHTML=mkHTML(curBill,false);
@@ -4224,7 +4509,7 @@ function submitSiteOut(){
   }
   else toast('⚠ '+(r.message||'Error'));
 }
-function submitSiteIn(){
+async function submitSiteIn(){
   var date=val('si-date')||td();
   var retTime=el('si-time')?el('si-time').value:'';
   var pay=Number(val('si-pay'))||0;
@@ -4235,12 +4520,18 @@ function submitSiteIn(){
     if(q>0) items.push({name:inp.getAttribute('data-name'), qty:q, group:inp.getAttribute('data-group')});
   });
   if(!items.length){ toast('⚠ குறைந்தது ஒரு return quantity போடுங்க'); return; }
+  // BUGFIX (network sync — site batch id collision): see submitSiteOut()
+  // above for the full story. Sync first so inBatches.length (and the id
+  // computed from it) reflects the Server's latest before this PC adds
+  // its own batch.
+  await netSyncBeforeCommit();
   var site=findSiteById(curSiteId);
   // Capture the batch number BEFORE the API call pushes the new batch —
   // otherwise the receipt shows one batch number higher than what's saved.
   var batchNo=(site.inBatches||[]).length+1;
   var r=apiAddSiteIn(curSiteId, date, items, pay, note, retTime);
   if(r.status==='ok'){
+    if(NET.mode==='client' && NET.connected) netPushState(); // push this batch immediately, don't wait for the debounce
     toast('✅ Return recorded — Rent charged ₹'+fmt(r.rentCharged||0)+'. Generating PDF…');
     curBill=buildSiteInBillObj(site,date,items,pay,note,r.rentCharged||0,batchNo); curMode='return';
     el('bill-content').innerHTML=mkHTML(curBill,true);
@@ -4251,7 +4542,7 @@ function submitSiteIn(){
   }
   else toast('⚠ '+(r.message||'Error'));
 }
-function submitSiteMissing(){
+async function submitSiteMissing(){
   var date=val('sm-date')||td();
   var chargeType=val('sm-chargetype')||'rent';
   var fixedTotal=Number(val('sm-fixed-amount'))||0;
@@ -4265,14 +4556,26 @@ function submitSiteMissing(){
     return {name:i.name, qty:i.qty, group:i.group, chargeType:chargeType,
       fixedAmount: chargeType==='fixed' ? shares[idx] : 0, note:note};
   });
+  // BUGFIX (network sync — missing-item id collision): missing-item ids
+  // come from the site's current max id + 1 (see nextMissingId), the same
+  // collision risk described in submitSiteOut() above. Sync first so the
+  // id is based on the Server's latest records.
+  await netSyncBeforeCommit();
   var r=apiMarkSiteMissing(curSiteId, date, items);
-  if(r.status==='ok'){ toast('✅ Marked missing: '+r.count+' entr'+(r.count===1?'y':'ies')); renderSiteWorkspace(); }
+  if(r.status==='ok'){
+    if(NET.mode==='client' && NET.connected) netPushState();
+    toast('✅ Marked missing: '+r.count+' entr'+(r.count===1?'y':'ies')); renderSiteWorkspace();
+  }
   else toast('⚠ '+(r.message||'Error'));
 }
-function resolveMissingItem(id){
+async function resolveMissingItem(id){
   var d=val('mi-date-'+id)||td();
+  await netSyncBeforeCommit();
   var r=apiResolveMissingItem(curSiteId, id, d);
-  if(r.status==='ok'){ toast('✅ Settled — Rent charged ₹'+fmt(r.rent)); renderSiteWorkspace(); loadStock(); }
+  if(r.status==='ok'){
+    if(NET.mode==='client' && NET.connected) netPushState();
+    toast('✅ Settled — Rent charged ₹'+fmt(r.rent)); renderSiteWorkspace(); loadStock();
+  }
   else toast('⚠ '+(r.message||'Error'));
 }
 // Recomputes and shows the settlement amount live as the "Found/Return
@@ -4335,22 +4638,7 @@ function fillRet(b){
   el('r-out').value=toISODate(b.outDate);
   if(!el('r-back').value) el('r-back').value=td();
   if(el('r-back-time')&&!el('r-back-time').value) el('r-back-time').value=nowHM();
-  // BUGFIX (advance re-applied on every partial return of the same bill):
-  // this always prefilled "Prev Advance" with the FULL original advance
-  // paid at dispatch time — even on a bill's 2nd, 3rd, etc. partial
-  // return. The advance is paid ONCE; the first partial return already
-  // offset the customer's total against it. Reusing the full amount
-  // again on every later return double/triple-counted the same advance,
-  // undercharging the customer (or overstating a refund) on every return
-  // after the first. Prefill with what's actually left of it instead:
-  // original advance minus however much of it earlier returns of this
-  // same bill already recorded as used (their own prev_advance field).
-  var advAlreadyUsed=0;
-  DB.returns.filter(function(x){ return x.original_bill_no===b.billNo; }).forEach(function(x){
-    advAlreadyUsed += Number(x.prev_advance)||0;
-  });
-  var advRemaining = Math.max(0, (Number(b.advance)||0) - advAlreadyUsed);
-  el('r-prev').value=advRemaining||'';
+  el('r-prev').value=b.advance||'';
   // BUGFIX: if this bill already has one or more earlier partial returns,
   // "Dispatched" must show what's still outstanding, not the full original
   // dispatch qty — otherwise a second/third return miscalculates Missing
@@ -4377,26 +4665,8 @@ function fillRet(b){
       var moEl=el('rmo-'+p.id); if(moEl&&found.monthPrice){moEl.value=found.monthPrice;}
       var mEl=el('rm-'+p.id); if(mEl){mEl.textContent=outstanding>0?'✅ complete':'—';mEl.style.color='var(--ok)';}
     } else {
-      // BUGFIX (phantom item leaking into an unrelated bill's return):
-      // this used to only zero the in-memory rDispatched/rQty for a
-      // product that isn't on THIS bill — it never touched the actual
-      // qty/rate/month-rate input fields or their `max`. If that product
-      // still had a leftover qty (typed while returning a DIFFERENT bill
-      // moments earlier, and preserved by buildR()'s "keep what's typed"
-      // behaviour), the input kept showing that old qty and `max`, and
-      // calcR() re-reads qty straight from the DOM every time it runs —
-      // silently overwriting rQty back to the stale value right after
-      // this branch just set it to 0. That let a return for Bill B go out
-      // carrying an item that was never even dispatched on Bill B. Now
-      // every field for a not-on-this-bill product is force-cleared, not
-      // just the in-memory copies.
-      rDispatched[p.id]=0; rQty[p.id]=0; rPrice[p.id]=0; rCalcType[p.id]='daily';
+      rDispatched[p.id]=0; rQty[p.id]=0;
       var dEl2=el('rd-'+p.id); if(dEl2)dEl2.textContent='—';
-      var qEl2=el('rq-'+p.id); if(qEl2){qEl2.max=0; qEl2.value=0;}
-      var pEl2=el('rp-'+p.id); if(pEl2) pEl2.value='';
-      var moEl2=el('rmo-'+p.id); if(moEl2) moEl2.value='';
-      var cEl2=el('r-ctype-'+p.id); if(cEl2) cEl2.value='daily';
-      var mEl2=el('rm-'+p.id); if(mEl2){mEl2.textContent='—'; mEl2.style.color='var(--mu)';}
     }
   });
   calcR();
@@ -4558,10 +4828,16 @@ function shareWA(){
     var site=findSiteById(curSiteId); if(!site)return;
     var t=computeSiteTotals(site);
     var ph=(site.phone||'').replace(/\D/g,''), wa=ph.startsWith('91')?ph:'91'+ph;
+    // BUGFIX: same gap as the on-screen/PDF Full Site Bill — this WhatsApp
+    // message never mentioned a refund, so a customer who overpaid would
+    // be sent a statement that just said "Balance: ₹0" with no indication
+    // money was actually owed back to them.
     var msg='🏗️ *FULL SITE STATEMENT — '+COMPANY.toUpperCase()+'*\n'+site.site_no+' | '+site.customer+'\n📞 '+site.phone+'\n\n'+
       '💰 Total Rent: ₹'+Number(t.grandRent).toLocaleString('en-IN')+'\n'+
       '✅ Paid: ₹'+Number(t.totalPayments).toLocaleString('en-IN')+'\n'+
-      '⚠️ Balance: ₹'+Number(t.balanceDue).toLocaleString('en-IN')+
+      (t.refundDue>0
+        ? '🟡 Refund Due to You: ₹'+Number(t.refundDue).toLocaleString('en-IN')
+        : '⚠️ Balance: ₹'+Number(t.balanceDue).toLocaleString('en-IN'))+
       '\n\n🙏 '+COMPANY;
     window.open('https://wa.me/'+wa+'?text='+encodeURIComponent(msg),'_blank');
     return;
@@ -4584,7 +4860,15 @@ function shareWA(){
     ?'📦 *RETURN RECEIPT — '+COMPANY.toUpperCase()+'*\n'+b.returnBillNo+' | Ref: '+b.originalBillNo+'\n'+
       '👤 '+b.customer+' | 📞 '+b.phone+'\n\nReturned:\n'+
       (b.items||[]).map(function(i){return '• '+i.name+': '+i.qty+(i.missing>0?' ⚠ '+i.missing+' missing':'');}).join('\n')+
-      '\n\n⏱ Actual: '+b.actualDays+' days\n'+(Number(b.finalBalance)<=0?'✅ FULLY PAID':'⚠️ Balance: ₹'+Number(b.finalBalance).toLocaleString('en-IN'))+
+            // BUGFIX: same refund gap as the on-screen preview (mkHTML) and PDF
+      // (dlPDF) for a return bill — this WhatsApp message only ever checked
+      // finalBalance<=0 and said "FULLY PAID", so a customer who was
+      // actually OWED a refund (finalBalance<0, e.g. overpaid advance vs.
+      // the real rent for the actual return duration) still got sent a
+      // message saying the account was fully paid with no mention of the
+      // money due back to them. Now mirrors the REFUND / FULLY PAID /
+      // Balance split used everywhere else in the app.
+      '\n\n⏱ Actual: '+b.actualDays+' days\n'+(Number(b.finalBalance)<0?'🟡 Refund Due to You: ₹'+Math.abs(Number(b.finalBalance)).toLocaleString('en-IN'):Number(b.finalBalance)<=0?'✅ FULLY PAID':'⚠️ Balance: ₹'+Number(b.finalBalance).toLocaleString('en-IN'))+
       '\n\n🙏 '+COMPANY
     :'🏗️ *DISPATCH BILL — '+COMPANY.toUpperCase()+'*\n'+b.billNo+' | '+b.date+'\n'+
       '👤 '+b.customer+' | 📞 '+b.phone+'\n📍 '+(b.address||'—')+'\n\nItems:\n'+
@@ -4701,14 +4985,15 @@ function loadPending(){
   var disp=all.filter(function(p){return p.type==='DISPATCH'||!p.type;});
   if(disp.length){
     html+='<div style="grid-column:1/-1;font-size:13px;color:var(--pri-d);font-weight:800;margin-bottom:4px">📤 DISPATCH PENDING ('+disp.length+')</div>';
+    // Simplified per request: card shows only the outstanding balance +
+    // the Settle Now button — name/phone/bill no/OVERDUE tag/due date are
+    // dropped from the card itself. They still appear on the Settle
+    // Payment popup after tapping the button (data-* attrs on the button
+    // carry them through to bSettle()), so nothing is lost, just hidden
+    // from this list view.
     html+=disp.map(function(p){
       return '<div class="pc'+(p.overdue?' overdue':'')+'">'+
-        (p.overdue?'<span class="od-tag">OVERDUE</span>':'')+
-        '<div class="pc-name">👤 '+p.customer+'</div>'+
-        '<div class="pc-phone">📞 '+p.phone+'</div>'+
-        '<div class="pc-bill">🧾 '+p.billNo+'</div>'+
         '<div class="pc-bal" style="color:var(--er)">₹ '+Number(p.balance).toLocaleString('en-IN')+'</div>'+
-        '<div class="pc-due">'+(p.overdue?'🔴 Overdue: ':'📅 Due: ')+fdt(p.inDate)+'</div>'+
         '<button data-bn="'+p.billNo+'" data-cust="'+esc(p.customer)+'" data-ph="'+esc(p.phone)+'" data-bal="'+p.balance+'" onclick="bSettle(this)" class="btn bt" style="margin-top:8px;width:100%;padding:7px">💳 Settle Now</button>'+
         '</div>';
     }).join('');
@@ -4716,12 +5001,11 @@ function loadPending(){
   var retPend=all.filter(function(p){return p.type==='RETURN';});
   if(retPend.length){
     html+='<div style="grid-column:1/-1;font-size:13px;color:var(--tl-d);font-weight:800;margin-top:14px;margin-bottom:4px">📥 RETURN BALANCE DUE ('+retPend.length+')</div>';
+    // Simplified per request: same as Dispatch Pending above — just the
+    // balance + Settle Now button, rest is dropped from the card (still
+    // available in the Settle Payment popup via the button's data-* attrs).
     html+=retPend.map(function(p){
       return '<div class="pc overdue">'+
-        '<span class="od-tag" style="background:rgba(13,148,136,.12);border-color:var(--tl);color:var(--tl)">RETURN DUE</span>'+
-        '<div class="pc-name">👤 '+p.customer+'</div>'+
-        '<div class="pc-phone">📞 '+p.phone+'</div>'+
-        '<div class="pc-bill" style="color:var(--tl-d)">🧾 '+p.billNo+(p.refBill?'<br><span style="color:var(--mu);font-size:10px">Ref: '+p.refBill+'</span>':'')+'</div>'+
         '<div class="pc-bal" style="color:var(--er)">₹ '+Number(p.balance).toLocaleString('en-IN')+'</div>'+
         '<button data-bn="'+p.billNo+'" data-cust="'+esc(p.customer)+'" data-ph="'+esc(p.phone)+'" data-bal="'+p.balance+'" data-type="RETURN" onclick="bSettle(this)" class="btn bt" style="margin-top:8px;width:100%;padding:7px">💳 Settle Now</button>'+
         '</div>';
@@ -4738,12 +5022,9 @@ function loadPending(){
   var sitePend=all.filter(function(p){return p.type==='SITE';});
   if(sitePend.length){
     html+='<div style="grid-column:1/-1;font-size:13px;color:#7c3aed;font-weight:800;margin-top:14px;margin-bottom:4px">🏗️ SITE LEDGER BALANCE DUE ('+sitePend.length+')</div>';
+    // Simplified per request: just the balance + the site's action button.
     html+=sitePend.map(function(p){
       return '<div class="pc" style="border-color:rgba(124,58,237,.35)">'+
-        '<span class="od-tag" style="background:rgba(124,58,237,.12);border-color:#7c3aed;color:#7c3aed">SITE</span>'+
-        '<div class="pc-name">👤 '+p.customer+'</div>'+
-        '<div class="pc-phone">📞 '+p.phone+'</div>'+
-        '<div class="pc-bill" style="color:#7c3aed">🏗️ '+p.billNo+'</div>'+
         '<div class="pc-bal" style="color:var(--er)">₹ '+Number(p.balance).toLocaleString('en-IN')+'</div>'+
         '<button onclick="swMain(\'sites\');openSite('+p.siteId+')" class="btn bt" style="margin-top:8px;width:100%;padding:7px">🏗️ View Site</button>'+
         '</div>';
@@ -4752,11 +5033,19 @@ function loadPending(){
   if(refunds.length){
     html+='<div style="grid-column:1/-1;font-size:13px;color:#7c3aed;font-weight:800;margin-top:14px;margin-bottom:4px">🟡 REFUND DUE TO CUSTOMER ('+refunds.length+')</div>';
     html+=refunds.map(function(p){
+      // BUGFIX: this bucket used to only ever contain regular dispatch/
+      // return bills. Sites that end up overpaid now land here too (see
+      // apiGetPending) — tagged so it's clear which kind of record it is,
+      // and linked back into that site's own workspace the same way the
+      // "SITE LEDGER BALANCE DUE" block above does.
+      var isSite=p.type==='SITE';
       return '<div class="pc" style="border-color:rgba(124,58,237,.35)">'+
+        (isSite?'<span class="od-tag" style="background:rgba(124,58,237,.12);border-color:#7c3aed;color:#7c3aed">SITE</span>':'')+
         '<div class="pc-name">👤 '+p.customer+'</div>'+
         '<div class="pc-phone">📞 '+p.phone+'</div>'+
-        '<div class="pc-bill" style="color:#7c3aed">🧾 '+p.billNo+'</div>'+
+        '<div class="pc-bill" style="color:#7c3aed">'+(isSite?'🏗️ ':'🧾 ')+p.billNo+'</div>'+
         '<div class="pc-bal" style="color:#7c3aed">🟡 Refund ₹ '+Math.abs(Number(p.balance)).toLocaleString('en-IN')+'</div>'+
+        (isSite?'<button onclick="swMain(\'sites\');openSite('+p.siteId+')" class="btn bt" style="margin-top:8px;width:100%;padding:7px">🏗️ View Site</button>':'')+
         '</div>';
     }).join('');
   }
@@ -4790,8 +5079,15 @@ function siteSettlePayment(){
   var t=computeSiteTotals(site);
   _smMode='SITE';
   _smBillNo=site.site_no;
+  // BUGFIX: when payments already collected on this site exceed the rent
+  // actually owed (t.refundDue>0), this used to say "✅ No balance due —
+  // enter advance amount" — actively inviting MORE money to be collected
+  // on a site that already owes the customer a refund, with no sign
+  // anywhere that a refund was due.
   var balLabel = t.balanceDue>0
     ? '<span style="color:var(--er);font-weight:700;font-size:16px;margin-top:4px;display:block">🔴 Balance Due: ₹'+t.balanceDue.toLocaleString('en-IN')+'</span>'
+    : t.refundDue>0
+    ? '<span style="color:#7c3aed;font-weight:700;font-size:16px;margin-top:4px;display:block">🟡 Refund Due to Customer: ₹'+t.refundDue.toLocaleString('en-IN')+'</span>'
     : '<span style="color:var(--ok);font-weight:700;font-size:16px;margin-top:4px;display:block">✅ No balance due — enter advance amount</span>';
   el('sm-info').innerHTML=
     '<div style="color:var(--tl-d);font-weight:700;font-size:14px;margin-bottom:6px">🏗️ '+esc(site.site_no)+'</div>'+
@@ -4806,14 +5102,23 @@ function siteSettlePayment(){
   setTimeout(function(){el('sm-amt').focus();},100);
 }
 function smClose(){ el('settle-modal').style.display='none'; _smBillNo=null; _smMode='BILL'; }
-function smSubmit(){
+async function smSubmit(){
   if(!_smBillNo)return;
   var amt=parseFloat(el('sm-amt').value)||0;
   var notes=el('sm-notes').value.trim();
   if(amt<=0){toast('⚠ Enter payment amount');return;}
   var res=el('sm-result');
   if(_smMode==='SITE'){
+    // BUGFIX (network sync — site payment id collision): site.payments ids
+    // are assigned as "current array length + 1", the same collision risk
+    // described in submitSiteOut() above (two PCs settling a payment on
+    // the same site while briefly out of sync can compute the same id, and
+    // the second payment gets silently dropped on the next merge). Sync
+    // first so the id reflects the Server's latest before this PC adds
+    // its own payment.
+    await netSyncBeforeCommit();
     var d=apiSettleSitePayment(curSiteId, amt, notes);
+    if(d.status==='ok' && NET.mode==='client' && NET.connected) netPushState();
     res.style.display='block';
     if(d.status==='ok'){
       var paid=Number(d.newBalance)<=0;
@@ -5225,10 +5530,20 @@ function toggleEmpDetail(id){
   if(box.style.display==='block'){ box.style.display='none'; return; }
   var e=DB.employees.find(function(x){ return x.id===id; });
   if(!e) return;
+  // BUGFIX: uploaded ID documents (front/back) were stored correctly as
+  // base64 image/PDF data, but this only ever printed a plain "Front ✅ /
+  // Back ✅" text label with nothing behind it to click — there was no way
+  // to actually open a document once it was uploaded. Each side that has
+  // a file now renders as a "👁 Front/Back" button that opens the actual
+  // stored image/PDF in a viewer modal (see viewEmpDoc/closeDocView).
   var docHtml=DOC_FIELDS.map(function(df){
     var d=(e.docs||{})[df[0]]||{};
     if(!d.front && !d.back) return '';
-    return '<div style="font-size:12px;margin-bottom:4px">🪪 '+df[1]+': '+(d.front?'Front ✅':'Front —')+' &nbsp; '+(d.back?'Back ✅':'Back —')+'</div>';
+    return '<div style="font-size:12px;margin-bottom:6px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">'+
+      '<span style="min-width:120px;font-weight:700">🪪 '+df[1]+':</span>'+
+      (d.front?'<button class="btn bo" style="padding:4px 10px;font-size:11px" onclick="viewEmpDoc('+e.id+',\''+df[0]+'\',\'front\')">👁 View Front</button>':'<span style="color:var(--mu)">Front —</span>')+
+      (d.back?'<button class="btn bo" style="padding:4px 10px;font-size:11px" onclick="viewEmpDoc('+e.id+',\''+df[0]+'\',\'back\')">👁 View Back</button>':'<span style="color:var(--mu)">Back —</span>')+
+      '</div>';
   }).join('') || '<div class="empty" style="padding:10px">No documents uploaded</div>';
   var perfHtml=(e.performance||[]).slice().reverse().map(function(p){
     return '<div class="perf-note '+(p.type==='positive'?'perf-pos':'perf-neg')+'">'+(p.type==='positive'?'👍':'👎')+' '+esc(p.note)+' <span style="color:var(--mu)">— '+fmtDate(p.date)+'</span></div>';
@@ -5243,6 +5558,33 @@ function toggleEmpDetail(id){
     '</div>'+perfHtml;
   box.style.display='block';
 }
+// Opens the actual stored document (image or PDF, front or back) for one
+// employee's ID proof in a modal. Falls back to a Download button for any
+// file type the browser can't preview inline (e.g. some PDFs inside a
+// plain webview), so the document is always reachable one way or another.
+function viewEmpDoc(empId, key, side){
+  var e=DB.employees.find(function(x){ return x.id===Number(empId); });
+  var d=e && e.docs && e.docs[key] ? e.docs[key][side] : null;
+  if(!d){ toast('⚠ No '+side+' document on file'); return; }
+  var dfRow=DOC_FIELDS.find(function(df){ return df[0]===key; });
+  var label=dfRow?dfRow[1]:key;
+  el('doc-view-title').textContent='🪪 '+e.name+' — '+label+' ('+(side==='front'?'Front':'Back')+')';
+  var isPdf=/^data:application\/pdf/i.test(d);
+  var body=el('doc-view-body');
+  body.innerHTML = isPdf
+    ? '<embed src="'+d+'" type="application/pdf" style="width:100%;height:65vh;border:0">'
+    : '<img src="'+d+'" style="max-width:100%;max-height:65vh;border-radius:6px">';
+  var dlBtn=el('doc-view-download-btn');
+  dlBtn.onclick=function(){
+    var a=document.createElement('a');
+    a.href=d;
+    a.download=(e.name||'employee').replace(/[^a-zA-Z0-9]+/g,'_')+'_'+key+'_'+side+(isPdf?'.pdf':'.jpg');
+    document.body.appendChild(a); a.click(); a.remove();
+  };
+  el('doc-view-modal').style.display='block';
+}
+function closeDocView(){ el('doc-view-modal').style.display='none'; }
+document.getElementById('doc-view-modal') && document.getElementById('doc-view-modal').addEventListener('click',function(e){ if(e.target===this) closeDocView(); });
 function addPerfNote(id,type){
   var inp=el('pf-note-'+id), note=inp?inp.value.trim():'';
   if(!note){ toast('⚠ Enter a note first'); return; }
@@ -5777,7 +6119,9 @@ function dlXL(){
   var rh=['Return Bill','Orig Bill','Customer','Phone','Return Date','Actual Days','Total Rental','Prev Adv','Add Pay','Final Bal','Status','Notes','Items Returned','Missing Items'];
   var rets=[rh].concat((d.returns||[]).map(function(r){
     var rStr=(r.return_items||[]).map(function(i){return i.product+'x'+i.qty;}).join(' | ');
-    return [r.return_bill_no,r.original_bill_no,r.customer,r.phone,r.return_date,r.actual_days,r.total_rental,r.prev_advance,r.additional_pay,r.final_balance,r.status,r.notes||'',rStr,''];
+    // BUGFIX: this column used to be hard-coded to '' — see apiGetExcelData().
+    var missStr=(r.missing_items||[]).map(function(i){return i.name+' x'+i.missing;}).join(' | ');
+    return [r.return_bill_no,r.original_bill_no,r.customer,r.phone,r.return_date,r.actual_days,r.total_rental,r.prev_advance,r.additional_pay,r.final_balance,r.status,r.notes||'',rStr,missStr];
   }));
   XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(rets),'Returns');
   var rih=['Return Bill','Customer','Return Date','Product','Returned Qty'];
@@ -5795,9 +6139,13 @@ function dlXL(){
   XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(is2),'inventory sub');
   // BUGFIX: Site Ledger balances were completely missing from this export —
   // add a summary sheet so open/closed sites and their money show up here too.
-  var slh=['Site No','Customer','Phone','Address','Status','Created','Total Rent','Paid','Balance Due'];
+  // BUGFIX: this sheet had no "Refund Due" column, so a site where
+  // payments collected exceeded the rent actually owed (refundDue>0 —
+  // see computeSiteTotals) exported with "Balance Due: 0" and nothing to
+  // show the business still owes that customer money back.
+  var slh=['Site No','Customer','Phone','Address','Status','Created','Total Rent','Paid','Balance Due','Refund Due'];
   var sl=[slh].concat((d.sites||[]).map(function(s){
-    return [s.site_no,s.customer,s.phone,s.address||'',s.status,s.created_at?new Date(s.created_at).toLocaleDateString('en-IN'):'',s.grandRent,s.totalPayments,s.balanceDue];
+    return [s.site_no,s.customer,s.phone,s.address||'',s.status,s.created_at?new Date(s.created_at).toLocaleDateString('en-IN'):'',s.grandRent,s.totalPayments,s.balanceDue,s.refundDue||0];
   }));
   if(sl.length>1) XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(sl),'Site Ledger');
   XLSX.writeFile(wb,'SMC_Data_'+new Date().toLocaleDateString('en-IN').replace(/\//g,'-')+'.xlsx');
