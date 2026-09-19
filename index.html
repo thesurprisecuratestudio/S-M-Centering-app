@@ -197,27 +197,8 @@ tr:last-child td{border-bottom:none}
 <body>
 
 <!-- ═══════════════ LOGIN / ADMIN AUTH GATE ═══════════════ -->
-<div id="auth-overlay" class="modal" style="display:flex;align-items:center;justify-content:center;z-index:500;background:rgba(15,20,35,.92)">
+<div id="auth-overlay" class="modal" style="display:none;align-items:center;justify-content:center;z-index:500;background:rgba(15,20,35,.92)">
   <div class="mbox" style="max-width:420px;width:92%;padding:30px 26px;max-height:92vh;overflow-y:auto">
-
-    <!-- FIRST-RUN SETUP -->
-    <div id="auth-setup-view" style="display:none">
-      <div style="font-size:19px;font-weight:800;color:var(--tl-d);margin-bottom:4px">🔐 Create Admin Login</div>
-      <div style="font-size:12.5px;color:var(--mu);margin-bottom:18px;line-height:1.6">First time setup — இந்த details வச்சுதான் இனிமேல் software open பண்ணணும். <strong>Security Code</strong>-ஐ கண்டிப்பா வேற இடத்துல எழுதி வையுங்க — password மறந்தா இதுதான் reset பண்ண உதவும்.</div>
-      <div class="fl" style="margin-bottom:12px"><label>Admin Username</label><input id="as-user" placeholder="e.g. admin" autocomplete="off"></div>
-      <div class="fl" style="margin-bottom:12px"><label>Password</label><input id="as-pass" type="password" placeholder="Min 4 characters" autocomplete="new-password"></div>
-      <div class="fl" style="margin-bottom:12px"><label>Confirm Password</label><input id="as-pass2" type="password" placeholder="Re-enter password" autocomplete="new-password"></div>
-      <div class="fl" style="margin-bottom:6px">
-        <label>Security Code (for password reset)</label>
-        <div style="display:flex;gap:8px">
-          <input id="as-code" placeholder="Click Generate ➜" readonly style="flex:1;font-weight:800;letter-spacing:1px">
-          <button type="button" class="btn bo" style="white-space:nowrap" onclick="genSecurityCode()">🎲 Generate</button>
-        </div>
-      </div>
-      <div id="as-code-warn" style="font-size:11.5px;color:var(--er);font-weight:700;margin-bottom:14px;display:none">⚠ இந்த code-ஐ இப்போவே எழுதி வையுங்க — இது மறுபடியும் காட்டப்பட மாட்டாது!</div>
-      <div id="as-msg" style="font-size:12px;color:var(--er);font-weight:700;margin-bottom:10px;display:none"></div>
-      <button class="btn bg" style="width:100%;padding:12px" onclick="submitSetup()">✅ Create Login &amp; Continue</button>
-    </div>
 
     <!-- LOGIN -->
     <div id="auth-login-view" style="display:none">
@@ -498,6 +479,7 @@ tr:last-child td{border-bottom:none}
         <div class="stat-card"><div class="sv" id="st-od" style="color:var(--er)">0</div><div class="sl">Overdue Bills</div></div>
         <div class="stat-card"><div class="sv" id="st-tot" style="color:var(--er)">₹0</div><div class="sl">Total Outstanding</div></div>
         <div class="stat-card"><div class="sv" id="st-ret" style="color:var(--pu)">₹0</div><div class="sl">Return Pending</div></div>
+        <div class="stat-card"><div class="sv" id="st-mf" style="color:var(--wn)">₹0</div><div class="sl">Missing Fine Due (separate)</div></div>
       </div>
       <div id="pending-grid" class="pending-grid"><div class="loading">Loading…</div></div>
     </div>
@@ -508,7 +490,7 @@ tr:last-child td{border-bottom:none}
     <div class="box">
       <div class="bh" style="color:var(--wn)">⚠️ Missing / Pending Return Materials <button class="rbtn" style="border-color:var(--wn);color:var(--wn)" onclick="loadMissing()">⟳ Refresh</button></div>
       <div class="note" style="border-color:var(--wn);background:#fff8ec;color:#8a5a06">
-        Shows customers who returned items with <strong>missing quantities</strong> or <strong>partial returns</strong>. Materials not yet returned appear here.
+        Shows ONLY items that are genuinely <strong>missing after a return</strong>, and any unpaid <strong>missing-item fine</strong>. Normal rental / return balances are in Pending → Return Balance Due and are never mixed in here.
       </div>
       <div id="missing-grid" style="margin-top:12px"><div class="loading">Click Refresh to load missing materials report</div></div>
     </div>
@@ -836,7 +818,7 @@ tr:last-child td{border-bottom:none}
         <button class="btn bg" onclick="exportBackup()">⬇ Download Full Backup (JSON)</button>
         <label class="btn bo" style="cursor:pointer">⬆ Restore from Backup<input type="file" id="backup-file" accept=".json" style="display:none" onchange="importBackup(this)"></label>
       </div>
-      <div class="warn" style="display:block;margin-top:14px">⚠ Restoring a backup will <strong>replace all current data</strong> on this device. Export a fresh backup first if unsure.</div>
+      <div class="warn" style="display:block;margin-top:14px">⚠ Restoring a backup will <strong>replace all current data</strong> on this device. A safety copy of the current data is saved automatically first (desktop app: <code>data\backups</code>). A daily automatic backup is also written there (last 14 kept).</div>
     </div>
     <div class="box">
       <div class="bh">⬇ Inventory-focused Excel Export</div>
@@ -886,7 +868,7 @@ tr:last-child td{border-bottom:none}
       <div class="bh">📡 Client Settings</div>
       <div class="note">Server PC-ல காட்டற IP Address-ஐ இங்க போடுங்க (e.g. 192.168.1.5). இரண்டு PC-யும் ஒரே WiFi Router-ல இருந்தா போதும்.</div>
       <div class="g3">
-        <div class="fl"><label>Server IP Address</label><input id="net-server-ip-input" placeholder="e.g. 192.168.1.5"></div>
+        <div class="fl"><label>Server IP Address</label><input id="net-server-ip-input" placeholder="e.g. 192.168.1.5, 192.168.1.20 (Wi-Fi and/or Ethernet IPs)"></div>
         <div class="fl">&nbsp;<button class="btn bg" onclick="netConnect()" style="width:100%">🔌 Connect</button></div>
         <div class="fl">&nbsp;<button class="btn bo" onclick="netCheckNow()" style="width:100%">🔄 Check Connection Now</button></div>
       </div>
@@ -915,15 +897,28 @@ tr:last-child td{border-bottom:none}
   <div id="pane-profile" class="pane">
 
     <div class="box">
-      <div class="bh">👤 Profile — Account Settings</div>
-      <div class="note">Login username / password மற்றும் Security Code (password reset-க்கு) இங்க மாத்தலாம். எந்த மாற்றமும் பண்ண இப்போவைய password போடணும்.</div>
-      <div class="sb" style="margin-top:10px">
-        <div class="sr"><span>Current Username</span><span id="pf-username" style="font-weight:800">—</span></div>
+      <div class="bh">🔐 Security — Username &amp; Password Login <span id="pf-login-badge" class="badge b-mu">OFF</span></div>
+      <div class="note">Login is <strong>OFF by default</strong> — the app opens without a password. Turn it ON only if you want a username/password at startup. These login settings are <strong>device-local</strong>: they are never synced to other PCs and are not part of backups.</div>
+      <div id="pf-off-actions" style="margin-top:10px"><button class="btn bg" onclick="startEnableLogin()">🔐 Enable Username &amp; Password Login</button></div>
+      <div id="pf-setup-box" style="display:none;margin-top:12px;max-width:460px">
+        <div class="fl" style="margin-bottom:10px"><label>Username</label><input id="as-user" placeholder="e.g. admin" autocomplete="off"></div>
+        <div class="fl" style="margin-bottom:10px"><label>Password (min 6 characters)</label><input id="as-pass" type="password" autocomplete="new-password"></div>
+        <div class="fl" style="margin-bottom:10px"><label>Confirm Password</label><input id="as-pass2" type="password" autocomplete="new-password"></div>
+        <div class="fl" style="margin-bottom:6px"><label>Security Code (for password reset)</label>
+          <div style="display:flex;gap:8px"><input id="as-code" placeholder="Click Generate" readonly style="flex:1;font-weight:800;letter-spacing:1px"><button type="button" class="btn bo" onclick="genSecurityCode()">🎲 Generate</button></div></div>
+        <div id="as-code-warn" style="font-size:11.5px;color:var(--er);font-weight:700;margin-bottom:10px;display:none">⚠ Write this code down now — it will not be shown again.</div>
+        <div id="as-msg" style="font-size:12px;color:var(--er);font-weight:700;margin-bottom:10px;display:none"></div>
+        <div class="acts" style="justify-content:flex-start"><button class="btn bg" onclick="submitSetup()">✅ Save &amp; Enable Login</button><button class="btn bo" onclick="cancelSetup()">Cancel</button></div>
+      </div>
+      <div id="pf-on-actions" style="display:none;margin-top:10px;max-width:460px">
+        <div class="fl"><label>Current Password (needed to turn login OFF)</label><input id="pf-dis-pass" type="password"></div>
+        <div id="pf-dis-msg" class="note" style="display:none;margin-top:8px"></div>
+        <div class="acts" style="justify-content:flex-start"><button class="btn br" onclick="disableLogin()">🔓 Turn Login OFF</button></div>
       </div>
     </div>
-
+    <div id="pf-manage">
     <div class="box">
-      <div class="bh">✏️ Change Username</div>
+      <div class="bh">✏️ Change Username <span id="pf-username" style="font-weight:800"></span></div>
       <div class="g2" style="max-width:460px">
         <div class="fl"><label>New Username</label><input id="pf-new-username" placeholder="New username"></div>
         <div class="fl"><label>Current Password</label><input id="pf-cu-pass" type="password" placeholder="Confirm with current password"></div>
@@ -960,6 +955,7 @@ tr:last-child td{border-bottom:none}
       <div class="note">இந்த device-ல இருந்து logout ஆகணும்னா கீழ button press பண்ணுங்க — திரும்ப open பண்ணும்போது login screen வரும்.</div>
       <div class="acts"><button class="btn br" onclick="doLogout()">🚪 Log Out</button></div>
     </div>
+    </div><!-- /pf-manage -->
 
   </div>
 
@@ -1464,7 +1460,13 @@ function __fileGet(path){
   try{ return (__nodeFS && __nodeFS.existsSync(path)) ? __nodeFS.readFileSync(path, 'utf8') : null; }catch(e){ return null; }
 }
 function __fileSet(path, text){
-  try{ __nodeFS.writeFileSync(path, text, 'utf8'); return true; }catch(e){ console.error('file save failed', e); return false; }
+  try{
+    var tmp = path + '.tmp';
+    __nodeFS.writeFileSync(tmp, text, 'utf8');
+    try{ __nodeFS.renameSync(tmp, path); }
+    catch(e2){ __nodeFS.writeFileSync(path, text, 'utf8'); try{ __nodeFS.unlinkSync(tmp); }catch(e3){} }
+    return true;
+  }catch(e){ console.error('file save failed', e); return false; }
 }
 
 var SEED_MAIN = [
@@ -1518,11 +1520,9 @@ function freshDB(){
     // fresher copy instead of silently losing them. Cleared once a push
     // to the Server succeeds. See updateInv().
     pendingInvDeltas: {},
-    // Local admin login (username/password + a Security Code for password
-    // reset). null until the first-run Setup screen creates it — see the
-    // AUTH / LOGIN SYSTEM section below. Never stores plain-text secrets,
-    // only salted PBKDF2 hashes.
-    auth: null
+    // Append-only logs (synced, capped)
+    auditLog: [],
+    paymentLog: []
   };
 }
 function loadDB(){
@@ -1535,7 +1535,7 @@ function loadDB(){
   }catch(e){ return null; }
 }
 var DB = loadDB();
-if(!DB){ DB = freshDB(); saveDB(); }
+if(!DB){ DB = freshDB(); saveDBRaw(); }
 // migrate older saved databases that predate the newer modules
 (function migrateDB(){
   var f=freshDB(); var changed=false;
@@ -1546,7 +1546,8 @@ if(!DB){ DB = freshDB(); saveDB(); }
     if(typeof DB[k]!=='number'){ DB[k]=1; changed=true; }
   });
   if(!DB.pendingInvDeltas || typeof DB.pendingInvDeltas!=='object'){ DB.pendingInvDeltas={}; changed=true; }
-  if(changed) saveDB();
+  ['auditLog','paymentLog'].forEach(function(k){ if(!Array.isArray(DB[k])){ DB[k]=[]; changed=true; } });
+  if(changed) saveDBRaw();
 })();
 function saveDB(){
   try{
@@ -1576,22 +1577,22 @@ var __nodeCrypto = null;
 try{ if(typeof require==='function') __nodeCrypto = require('crypto'); }catch(e){ __nodeCrypto=null; }
 function __randHex(n){
   if(__nodeCrypto) return __nodeCrypto.randomBytes(n).toString('hex');
-  // Fallback only if this somehow runs outside Electron/Node (e.g. a
-  // plain browser tab) — weaker, but keeps the screen from hard-crashing.
-  var s=''; for(var i=0;i<n*2;i++) s+=Math.floor(Math.random()*16).toString(16);
+  var s='',i; for(i=0;i<n*2;i++) s+=Math.floor(Math.random()*16).toString(16);
   return s;
 }
+function uid(){ try{ if(__nodeCrypto && __nodeCrypto.randomUUID) return __nodeCrypto.randomUUID(); }catch(e){} return __randHex(16); }
 function __hashSecret(secret, saltHex){
   if(__nodeCrypto) return __nodeCrypto.pbkdf2Sync(String(secret), saltHex, 100000, 32, 'sha256').toString('hex');
-  var s=String(secret)+saltHex, h=0;
-  for(var i=0;i<s.length;i++){ h=((h<<5)-h+s.charCodeAt(i))|0; }
-  return 'weak'+Math.abs(h).toString(16);
+  return '';
+}
+function __hashEq(a,b){
+  try{ var A=Buffer.from(String(a)), B=Buffer.from(String(b)); return A.length===B.length && __nodeCrypto.timingSafeEqual(A,B); }
+  catch(e){ return false; }
 }
 function __makeCode(){
-  // 8 chars, grouped XXXX-XXXX, no ambiguous 0/O/1/I so it's easy to
-  // read back from handwriting.
-  var chars='ABCDEFGHJKLMNPQRSTUVWXYZ23456789', c='';
-  for(var i=0;i<8;i++){ c+=chars.charAt(Math.floor(Math.random()*chars.length)); if(i===3) c+='-'; }
+  var chars='ABCDEFGHJKLMNPQRSTUVWXYZ23456789', c='', i;
+  var bytes = __nodeCrypto ? __nodeCrypto.randomBytes(8) : null;
+  for(i=0;i<8;i++){ c+=chars.charAt((bytes?bytes[i]:Math.floor(Math.random()*256))%chars.length); if(i===3) c+='-'; }
   return c;
 }
 function genSecurityCode(){
@@ -1603,21 +1604,65 @@ function genSecurityCode(){
 function __authMsg(id,text){ var e=el(id); if(!e) return; e.textContent='⚠ '+text; e.style.display='block'; }
 function __authMsgHide(id){ var e=el(id); if(e) e.style.display='none'; }
 
-function authGateShow(){
-  var setupDone = !!(DB.auth && DB.auth.hash);
-  el('auth-overlay').style.display='flex';
-  el('auth-setup-view').style.display = setupDone ? 'none' : 'block';
-  el('auth-login-view').style.display = setupDone ? 'block' : 'none';
-  el('auth-forgot-view').style.display = 'none';
-  if(setupDone){ el('al-user').value=''; el('al-pass').value=''; __authMsgHide('al-msg'); }
-  else { el('as-user').value=''; el('as-pass').value=''; el('as-pass2').value=''; el('as-code').value=''; el('as-code-warn').style.display='none'; __authMsgHide('as-msg'); }
+// ── DEVICE-LOCAL files (never inside DB, never synced, never in backups) ──
+function __lsPath(name){ return __dataFilePath ? __dataFilePath.replace('S_M_Centering_Data.json', name) : null; }
+function __lsGet(name,key){ try{ var raw = __nodeFS ? __fileGet(__lsPath(name)) : localStorage.getItem(key); return raw ? JSON.parse(raw) : null; }catch(e){ return null; } }
+function __lsSet(name,key,obj){ try{ var raw=JSON.stringify(obj); if(__nodeFS) return __fileSet(__lsPath(name), raw); localStorage.setItem(key, raw); return true; }catch(e){ return false; } }
+var LOCAL = __lsGet('S_M_Centering_Local.json','vbcs_local_v1') || {};
+function getDeviceId(){
+  if(!LOCAL.deviceId){ LOCAL.deviceId=uid(); __lsSet('S_M_Centering_Local.json','vbcs_local_v1',LOCAL); }
+  return LOCAL.deviceId;
 }
-function authGateHide(){ el('auth-overlay').style.display='none'; }
-function showLoginView(){
+var AUDIT_MAX=5000, PAYLOG_MAX=10000;
+function auditLog(action, detail, ref){
+  try{
+    if(!DB) return;
+    if(!Array.isArray(DB.auditLog)) DB.auditLog=[];
+    DB.auditLog.push({id:uid(), ts:new Date().toISOString(), device:getDeviceId(), deviceName:(NET&&NET.deviceName)||'', action:action, detail:String(detail||'').slice(0,300), ref:ref||''});
+    if(DB.auditLog.length>AUDIT_MAX) DB.auditLog.splice(0, DB.auditLog.length-AUDIT_MAX);
+  }catch(e){}
+}
+
+// ══════════════════════════════════════════════════════════════
+// AUTH — OPTIONAL, OFF BY DEFAULT, DEVICE-LOCAL.
+// Credentials live in data\S_M_Centering_Auth.json (or localStorage in a
+// browser) — NOT in DB — so Network Sync / backup-restore can never
+// overwrite or leak them. Only salted PBKDF2 hashes are stored.
+// ══════════════════════════════════════════════════════════════
+var AUTH = __lsGet('S_M_Centering_Auth.json','vbcs_auth_local_v1');
+if(!AUTH || typeof AUTH!=='object') AUTH=null;
+var __authFails=0, __authLockUntil=0;
+function authSave(){ if(!AUTH) return true; var ok=__lsSet('S_M_Centering_Auth.json','vbcs_auth_local_v1',AUTH); if(!ok) toast('⚠ Could not save login settings'); return ok; }
+function authHasCreds(){ return !!(AUTH && AUTH.hash); }
+function authIsEnabled(){ return !!(AUTH && AUTH.enabled && AUTH.hash); }
+// One-time migration: older versions kept the login inside the synced DB.
+// Move it to the device-local file (login stays OFF per default) and purge it from DB.
+(function authMigrate(){
+  if(DB && DB.auth){
+    if(!authHasCreds() && DB.auth.hash){
+      AUTH={enabled:false,user:DB.auth.user,pSalt:DB.auth.pSalt,hash:DB.auth.hash,cSalt:DB.auth.cSalt,codeHash:DB.auth.codeHash};
+      authSave();
+    }
+    delete DB.auth; saveDBRaw();
+  }
+})();
+function __authThrottled(id){
+  var now=Date.now();
+  if(now<__authLockUntil){ __authMsg(id,'Too many wrong attempts — wait '+Math.ceil((__authLockUntil-now)/1000)+'s'); return true; }
+  return false;
+}
+function __authFail(){ __authFails++; if(__authFails>=5){ __authLockUntil=Date.now()+30000; __authFails=0; } }
+function __passOk(p){ return !!(p && authHasCreds() && __hashEq(__hashSecret(p,AUTH.pSalt),AUTH.hash)); }
+
+function authGateShow(){
+  if(!authIsEnabled()){ el('auth-overlay').style.display='none'; return; }
+  el('auth-overlay').style.display='flex';
   el('auth-login-view').style.display='block';
   el('auth-forgot-view').style.display='none';
-  __authMsgHide('al-msg');
+  el('al-user').value=''; el('al-pass').value=''; __authMsgHide('al-msg');
 }
+function authGateHide(){ el('auth-overlay').style.display='none'; }
+function showLoginView(){ el('auth-login-view').style.display='block'; el('auth-forgot-view').style.display='none'; __authMsgHide('al-msg'); }
 function showForgotView(){
   el('auth-login-view').style.display='none';
   el('auth-forgot-view').style.display='block';
@@ -1625,58 +1670,76 @@ function showForgotView(){
   el('af-code').value=''; el('af-pass').value=''; el('af-pass2').value='';
   __authMsgHide('af-msg');
 }
-
+function startEnableLogin(){
+  if(!__nodeCrypto){ toast('⚠ Login needs the desktop app (secure hashing not available here)'); return; }
+  if(authHasCreds()){
+    AUTH.enabled=true; authSave(); auditLog('SECURITY','Login enabled'); saveDB();
+    toast('✅ Login enabled — it will be asked at next startup'); renderProfile(); return;
+  }
+  el('pf-setup-box').style.display='block'; el('pf-off-actions').style.display='none';
+  ['as-user','as-pass','as-pass2','as-code'].forEach(function(i){ el(i).value=''; });
+  el('as-code-warn').style.display='none'; __authMsgHide('as-msg');
+}
+function cancelSetup(){ el('pf-setup-box').style.display='none'; el('pf-off-actions').style.display='block'; }
 function submitSetup(){
   var user=val('as-user'), pass=el('as-pass').value, pass2=el('as-pass2').value, code=(el('as-code').value||'').trim();
-  if(!user){ __authMsg('as-msg','Username போடுங்க'); return; }
-  if(!pass || pass.length<4){ __authMsg('as-msg','Password குறைந்தது 4 characters இருக்கணும்'); return; }
-  if(pass!==pass2){ __authMsg('as-msg','Password match ஆகல'); return; }
-  if(!code){ __authMsg('as-msg','Security Code Generate பண்ணுங்க'); return; }
+  if(!user){ __authMsg('as-msg','Enter a username'); return; }
+  if(!pass || pass.length<6){ __authMsg('as-msg','Password must be at least 6 characters'); return; }
+  if(pass!==pass2){ __authMsg('as-msg','Passwords do not match'); return; }
+  if(!code){ __authMsg('as-msg','Click Generate to create a Security Code'); return; }
   var pSalt=__randHex(16), cSalt=__randHex(16);
-  DB.auth = {
-    user:user, pSalt:pSalt, hash:__hashSecret(pass,pSalt),
-    cSalt:cSalt, codeHash:__hashSecret(code.toUpperCase(),cSalt)
-  };
-  saveDB();
-  toast('✅ Admin login created!');
-  authGateHide();
+  AUTH={enabled:true,user:user,pSalt:pSalt,hash:__hashSecret(pass,pSalt),cSalt:cSalt,codeHash:__hashSecret(code.toUpperCase(),cSalt)};
+  if(!authSave()) return;
+  auditLog('SECURITY','Login enabled (new credentials)'); saveDB();
+  toast('✅ Login enabled'); renderProfile();
+}
+function disableLogin(){
+  var p=el('pf-dis-pass').value;
+  if(__authThrottled('pf-dis-msg')) return;
+  if(!__passOk(p)){ __authFail(); __pfMsg('pf-dis-msg','Current password is wrong',false); return; }
+  AUTH.enabled=false; authSave(); auditLog('SECURITY','Login disabled'); saveDB();
+  el('pf-dis-pass').value=''; toast('✅ Login turned OFF'); renderProfile();
 }
 function submitLogin(){
   var user=val('al-user'), pass=el('al-pass').value;
-  if(!DB.auth || !DB.auth.hash){ authGateShow(); return; }
-  if(!user||!pass){ __authMsg('al-msg','Username & Password இரண்டையும் போடுங்க'); return; }
-  if(user.toLowerCase()!==String(DB.auth.user||'').trim().toLowerCase() || __hashSecret(pass,DB.auth.pSalt)!==DB.auth.hash){
-    __authMsg('al-msg','Username அல்லது Password தப்பா இருக்கு'); return;
+  if(!authIsEnabled()){ authGateHide(); return; }
+  if(__authThrottled('al-msg')) return;
+  if(!user||!pass){ __authMsg('al-msg','Enter username and password'); return; }
+  if(user.toLowerCase()!==String(AUTH.user||'').trim().toLowerCase() || !__passOk(pass)){
+    __authFail(); __authMsg('al-msg','Wrong username or password'); return;
   }
-  el('al-pass').value='';
+  __authFails=0; el('al-pass').value='';
   authGateHide();
 }
 function submitForgot(){
   var user=val('af-user'), code=val('af-code'), pass=el('af-pass').value, pass2=el('af-pass2').value;
-  if(!DB.auth || !DB.auth.codeHash){ __authMsg('af-msg','Security Code set பண்ணல'); return; }
-  if(user.toLowerCase()!==String(DB.auth.user||'').trim().toLowerCase()){ __authMsg('af-msg','Username தப்பு'); return; }
-  if(!code){ __authMsg('af-msg','Security Code போடுங்க'); return; }
-  if(__hashSecret(code.toUpperCase(),DB.auth.cSalt)!==DB.auth.codeHash){ __authMsg('af-msg','Security Code தப்பு'); return; }
-  if(!pass || pass.length<4){ __authMsg('af-msg','புது Password குறைந்தது 4 characters இருக்கணும்'); return; }
-  if(pass!==pass2){ __authMsg('af-msg','Password match ஆகல'); return; }
+  if(!authHasCreds() || !AUTH.codeHash){ __authMsg('af-msg','No Security Code is set on this device'); return; }
+  if(__authThrottled('af-msg')) return;
+  if(user.toLowerCase()!==String(AUTH.user||'').trim().toLowerCase()){ __authFail(); __authMsg('af-msg','Wrong username'); return; }
+  if(!code){ __authMsg('af-msg','Enter your Security Code'); return; }
+  if(!__hashEq(__hashSecret(code.toUpperCase(),AUTH.cSalt),AUTH.codeHash)){ __authFail(); __authMsg('af-msg','Wrong Security Code'); return; }
+  if(!pass || pass.length<6){ __authMsg('af-msg','New password must be at least 6 characters'); return; }
+  if(pass!==pass2){ __authMsg('af-msg','Passwords do not match'); return; }
   var pSalt=__randHex(16);
-  DB.auth.pSalt=pSalt; DB.auth.hash=__hashSecret(pass,pSalt);
-  saveDB();
-  toast('✅ Password reset ஆயிடுச்சு! இப்போ login பண்ணுங்க');
-  showLoginView();
-  el('al-user').value=DB.auth.user;
+  AUTH.pSalt=pSalt; AUTH.hash=__hashSecret(pass,pSalt);
+  authSave(); auditLog('SECURITY','Password reset via Security Code'); saveDB();
+  toast('✅ Password reset — please login'); showLoginView(); el('al-user').value=AUTH.user;
 }
 function doLogout(){
-  if(!confirm('Logout ஆகணுமா?')) return;
+  if(!authIsEnabled()){ toast('Login is OFF — nothing to log out of'); return; }
+  if(!confirm('Log out?')) return;
   authGateShow();
 }
-
-// ── PROFILE TAB (change username/password/security code) ──────
 function renderProfile(){
-  if(!DB.auth) return;
-  el('pf-username').textContent = DB.auth.user||'—';
-  ['pf-new-username','pf-cu-pass','pf-cp-pass','pf-np-pass','pf-np-pass2','pf-sc-pass'].forEach(function(id){ if(el(id)) el(id).value=''; });
-  __authMsgHide('pf-user-msg'); __authMsgHide('pf-pass-msg'); __authMsgHide('pf-code-msg');
+  var has=authHasCreds(), on=authIsEnabled();
+  var b=el('pf-login-badge'); if(b){ b.textContent=on?'ON':'OFF'; b.className='badge '+(on?'b-ok':'b-mu'); }
+  el('pf-off-actions').style.display = on ? 'none' : (el('pf-setup-box').style.display==='block'?'none':'block');
+  if(on) el('pf-setup-box').style.display='none';
+  el('pf-on-actions').style.display = on ? 'block' : 'none';
+  el('pf-manage').style.display = has ? 'block' : 'none';
+  if(has) el('pf-username').textContent = '('+(AUTH.user||'')+')';
+  ['pf-new-username','pf-cu-pass','pf-cp-pass','pf-np-pass','pf-np-pass2','pf-sc-pass','pf-dis-pass'].forEach(function(id){ if(el(id)) el(id).value=''; });
+  __authMsgHide('pf-user-msg'); __authMsgHide('pf-pass-msg'); __authMsgHide('pf-code-msg'); __authMsgHide('pf-dis-msg');
   var box=el('pf-newcode-box'); if(box){ box.style.display='none'; box.textContent=''; }
 }
 function __pfMsg(id,text,ok){
@@ -1687,39 +1750,34 @@ function __pfMsg(id,text,ok){
 }
 function changeUsername(){
   var newUser=val('pf-new-username'), curPass=el('pf-cu-pass').value;
-  if(!newUser){ __pfMsg('pf-user-msg','New username போடுங்க',false); return; }
-  if(!curPass || __hashSecret(curPass,DB.auth.pSalt)!==DB.auth.hash){ __pfMsg('pf-user-msg','Current password தப்பு',false); return; }
-  DB.auth.user=newUser;
-  saveDB();
-  __pfMsg('pf-user-msg','Username update ஆயிடுச்சு: '+newUser,true);
-  renderProfile();
+  if(!newUser){ __pfMsg('pf-user-msg','Enter a new username',false); return; }
+  if(__authThrottled('pf-user-msg')) return;
+  if(!__passOk(curPass)){ __authFail(); __pfMsg('pf-user-msg','Current password is wrong',false); return; }
+  AUTH.user=newUser; authSave(); auditLog('SECURITY','Username changed'); saveDB();
+  __pfMsg('pf-user-msg','Username updated: '+newUser,true); renderProfile();
 }
 function changePassword(){
   var curPass=el('pf-cp-pass').value, newPass=el('pf-np-pass').value, newPass2=el('pf-np-pass2').value;
-  if(!curPass || __hashSecret(curPass,DB.auth.pSalt)!==DB.auth.hash){ __pfMsg('pf-pass-msg','Current password தப்பு',false); return; }
-  if(!newPass || newPass.length<4){ __pfMsg('pf-pass-msg','புது Password குறைந்தது 4 characters இருக்கணும்',false); return; }
-  if(newPass!==newPass2){ __pfMsg('pf-pass-msg','புது Password match ஆகல',false); return; }
+  if(__authThrottled('pf-pass-msg')) return;
+  if(!__passOk(curPass)){ __authFail(); __pfMsg('pf-pass-msg','Current password is wrong',false); return; }
+  if(!newPass || newPass.length<6){ __pfMsg('pf-pass-msg','New password must be at least 6 characters',false); return; }
+  if(newPass!==newPass2){ __pfMsg('pf-pass-msg','Passwords do not match',false); return; }
   var pSalt=__randHex(16);
-  DB.auth.pSalt=pSalt; DB.auth.hash=__hashSecret(newPass,pSalt);
-  saveDB();
-  __pfMsg('pf-pass-msg','Password update ஆயிடுச்சு',true);
-  renderProfile();
+  AUTH.pSalt=pSalt; AUTH.hash=__hashSecret(newPass,pSalt);
+  authSave(); auditLog('SECURITY','Password changed'); saveDB();
+  renderProfile(); __pfMsg('pf-pass-msg','Password updated',true);
 }
 function regenerateSecurityCode(){
   var curPass=el('pf-sc-pass').value;
-  if(!curPass || __hashSecret(curPass,DB.auth.pSalt)!==DB.auth.hash){ __pfMsg('pf-code-msg','Current password தப்பு',false); return; }
-  var code=__makeCode();
-  var cSalt=__randHex(16);
-  DB.auth.cSalt=cSalt; DB.auth.codeHash=__hashSecret(code.toUpperCase(),cSalt);
-  saveDB();
+  if(__authThrottled('pf-code-msg')) return;
+  if(!__passOk(curPass)){ __authFail(); __pfMsg('pf-code-msg','Current password is wrong',false); return; }
+  var code=__makeCode(), cSalt=__randHex(16);
+  AUTH.cSalt=cSalt; AUTH.codeHash=__hashSecret(code.toUpperCase(),cSalt);
+  authSave(); auditLog('SECURITY','Security Code regenerated'); saveDB();
   var box=el('pf-newcode-box'); box.style.display='block'; box.textContent='🔑 '+code;
-  __pfMsg('pf-code-msg','புது Security Code உருவாச்சு — இப்பவே எழுதி வையுங்க, திரும்ப காட்டப்பட மாட்டாது!',true);
+  __pfMsg('pf-code-msg','New Security Code created — write it down now, it will not be shown again!',true);
   el('pf-sc-pass').value='';
 }
-// Show the login/setup gate as soon as this script runs. The script tag is
-// placed after the overlay's HTML in the document, so the elements it
-// needs already exist — no need to wait for the window 'load' event (that
-// would let the rest of the app flash on screen for a moment first).
 authGateShow();
 
 // ══════════════════════════════════════════════════════════════
@@ -1732,7 +1790,8 @@ authGateShow();
 // If the network drops, Client PCs keep working from their last
 // synced copy and auto-reconnect + auto-sync once it's back.
 // ══════════════════════════════════════════════════════════════
-var ARRAY_KEY_MAP = { // array field -> unique key used to detect "already have this record" during merge
+var ARRAY_KEY_MAP = {
+  auditLog:'id', paymentLog:'id', // array field -> unique key used to detect "already have this record" during merge
   sales:'bill_no', returns:'return_bill_no', customers:'id', employees:'id', attendance:'id',
   salaries:'id', expenses:'id', incomes:'id', maintenance:'id', sites:'site_no',
   invMain:'id', invSub:'id'
@@ -1751,7 +1810,9 @@ var NET = {
   pushTimer:null,
   pushInFlight:false,
   pushQueued:false,
-  pollTimer:null
+  pollTimer:null,
+  activeIp:'', checking:false, everSynced:false, hasUnsynced:false, pendingCount:0,
+  saveSeq:0, failCount:0, _nextTryAt:0, lastError:''
 };
 
 function netCfgPath(){ return __netCfgFilePath; }
@@ -1797,27 +1858,50 @@ function netRenderPanelUI(){
     el('net-server-status').textContent = NET.server?'🟢 Running on port '+NET.port:'⭕ Not started';
     el('net-server-start-btn').style.display = NET.server?'none':'inline-block';
     el('net-server-stop-btn').style.display = NET.server?'inline-block':'none';
-    el('net-server-ip').textContent = netLocalIPs().join('  |  ')||'—';
+    el('net-server-ip').textContent = netLocalIfaces().map(function(x){ return x.name+': '+x.address; }).join('  |  ')||'—';
     var activeClients=Object.keys(NET.clientSeen).filter(function(ip){ return Date.now()-NET.clientSeen[ip]<15000; }).length;
     el('net-server-clients').textContent = activeClients;
     el('net-server-version').textContent = NET.version;
   }
   if(NET.mode==='client'){
-    el('net-client-status').textContent = NET.connected?'🟢 Connected — live syncing':'🔴 Not connected';
+    el('net-client-status').textContent = netStateLabel();
     el('net-client-lastsync').textContent = NET._lastSyncAt ? new Date(NET._lastSyncAt).toLocaleTimeString('en-IN') : '—';
-    el('net-client-pending').textContent = NET.hasUnsynced ? '1 (syncing…)' : '0';
+    el('net-client-pending').textContent = NET.hasUnsynced ? (NET.pendingCount||1)+' change(s) waiting to sync' : '0';
     el('net-client-warn').style.display = NET.connected?'none':'block';
+    if(!NET.connected && NET.lastError) el('net-client-warn').textContent='⚠ Server not reachable ('+NET.lastError+'). This PC keeps working offline and will retry automatically.';
   }
   netUpdateStatusBar();
+}
+function netStateLabel(){
+  if(NET.mode!=='client') return '';
+  if(!NET.connected) return NET.checking ? '🟡 Connecting…' : (NET.hasUnsynced ? '🔴 Offline — '+(NET.pendingCount||1)+' change(s) pending' : '🔴 Offline — will retry');
+  if(NET.pushInFlight) return '🟡 Syncing…';
+  if(NET.lastError) return '🔴 Sync Error: '+NET.lastError;
+  if(NET.hasUnsynced) return '🟡 Pending Sync ('+(NET.pendingCount||1)+')';
+  return '🟢 Synced'+(NET._lastSyncAt?' — '+new Date(NET._lastSyncAt).toLocaleTimeString('en-IN'):'');
 }
 function netUpdateStatusBar(){
   var dot=el('net-cdot'), txt=el('net-cbar-text'); if(!dot||!txt) return;
   if(NET.mode==='off'){ dot.style.background='var(--ok)'; txt.textContent='💾 Offline Mode — all data stored on this device'; return; }
-  if(NET.mode==='server'){ dot.style.background=NET.server?'var(--ok)':'var(--er)'; txt.textContent = NET.server?'🌐 Network Server ON — other PCs can connect':'🌐 Server mode selected — press Start Server'; return; }
-  if(NET.mode==='client'){
-    dot.style.background = NET.connected?'var(--ok)':'var(--er)';
-    txt.textContent = NET.connected ? '🌐 Synced with Server ('+NET.serverIp+')' : '⚠ Server not reachable — working offline, will auto-sync';
+  if(NET.mode==='server'){
+    var peers=Object.keys(NET.clientSeen).filter(function(k){ return Date.now()-NET.clientSeen[k]<15000; }).length;
+    dot.style.background=NET.server?'var(--ok)':'var(--er)';
+    txt.textContent = NET.server?('🌐 Network Server ON — '+peers+' PC(s) connected'):'🌐 Server mode selected — press Start Server'; return;
   }
+  var ok = NET.connected && !NET.hasUnsynced && !NET.lastError;
+  dot.style.background = ok?'var(--ok)':(NET.connected?'var(--wn)':'var(--er)');
+  txt.textContent = '🌐 '+netStateLabel()+(NET.connected&&NET.activeIp?' ('+NET.activeIp+')':'');
+}
+function netLocalIfaces(){
+  var out=[];
+  try{
+    if(!__nodeFS) return out;
+    var ifaces=require('os').networkInterfaces();
+    Object.keys(ifaces).forEach(function(name){
+      (ifaces[name]||[]).forEach(function(ni){ if(ni.family==='IPv4' && !ni.internal) out.push({name:name,address:ni.address}); });
+    });
+  }catch(e){}
+  return out;
 }
 function netLocalIPs(){
   try{
@@ -1841,14 +1925,15 @@ function netStartServer(){
   NET.port = Number(el('net-port')?el('net-port').value:NET.port)||8420;
   NET.deviceName = val('net-devname')||NET.deviceName;
   NET.mode='server'; netSaveConfig();
+  if(!NET.version) NET.version = 1 + Math.floor(Math.random()*1000000); // never 0, so a fresh client can never blindly overwrite this DB
   try{
     var http=require('http');
     NET.server=http.createServer(function(req,res){
       res.setHeader('Access-Control-Allow-Origin','*');
       res.setHeader('Access-Control-Allow-Methods','GET,POST,OPTIONS');
-      res.setHeader('Access-Control-Allow-Headers','Content-Type');
+      res.setHeader('Access-Control-Allow-Headers','Content-Type, X-Device-Id, X-Device-Name');
       if(req.method==='OPTIONS'){ res.writeHead(204); res.end(); return; }
-      var ip=(req.socket&&req.socket.remoteAddress)||'?'; NET.clientSeen[ip]=Date.now();
+      var ip=String(req.headers['x-device-id']||(req.socket&&req.socket.remoteAddress)||'?'); NET.clientSeen[ip]=Date.now();
       if(req.method==='GET' && req.url==='/api/ping'){
         res.writeHead(200,{'Content-Type':'application/json'}); res.end(JSON.stringify({ok:true,version:NET.version,time:Date.now()})); return;
       }
@@ -1856,15 +1941,17 @@ function netStartServer(){
         res.writeHead(200,{'Content-Type':'application/json'}); res.end(JSON.stringify({version:NET.version,db:DB})); return;
       }
       if(req.method==='POST' && req.url==='/api/save'){
-        var body=''; req.on('data',function(c){body+=c;});
+        var body='', tooBig=false; req.on('data',function(c){ if(tooBig) return; body+=c; if(body.length>150*1024*1024){ tooBig=true; res.writeHead(413,{'Content-Type':'application/json'}); res.end(JSON.stringify({ok:false,message:'too large'})); } });
         req.on('end',function(){
+          if(tooBig) return;
           try{
             var payload=JSON.parse(body);
+            if(!payload || !payload.db || !Array.isArray(payload.db.invMain) || !Array.isArray(payload.db.sales)){ res.writeHead(400,{'Content-Type':'application/json'}); res.end(JSON.stringify({ok:false,message:'invalid data'})); return; }
             if(Number(payload.baseVersion)!==NET.version){
               res.writeHead(409,{'Content-Type':'application/json'});
               res.end(JSON.stringify({ok:false,version:NET.version,db:DB})); return;
             }
-            DB=payload.db; saveDBRaw(); NET.version++;
+            DB=payload.db; delete DB.auth; DB.pendingInvDeltas={}; saveDBRaw(); NET.version++;
             res.writeHead(200,{'Content-Type':'application/json'});
             res.end(JSON.stringify({ok:true,version:NET.version}));
             netRenderPanelUI(); netRerenderCurrentPane();
@@ -1875,12 +1962,12 @@ function netStartServer(){
       res.writeHead(404,{'Content-Type':'application/json'}); res.end(JSON.stringify({ok:false,message:'not found'}));
     });
     NET.server.on('error', function(e){ toast('⚠ Server could not start: '+e.message); NET.server=null; netRenderPanelUI(); });
-    NET.server.listen(NET.port, function(){ toast('✅ Network Server started on port '+NET.port); netRenderPanelUI(); });
+    NET.server.listen(NET.port, '0.0.0.0', function(){ toast('✅ Network Server started on port '+NET.port); netRenderPanelUI(); });
   }catch(e){ toast('⚠ Could not start server: '+e.message); NET.server=null; }
   netRenderPanelUI();
 }
 function netStopServer(){
-  if(NET.server){ try{ NET.server.close(); }catch(e){} NET.server=null; toast('⏹ Network Server stopped'); }
+  if(NET.server){ try{ NET.server.close(); if(NET.server.closeAllConnections) NET.server.closeAllConnections(); }catch(e){} NET.server=null; toast('⏹ Network Server stopped'); }
   netRenderPanelUI();
 }
 // Writes DB to disk/localStorage WITHOUT re-triggering the client push loop
@@ -1895,74 +1982,97 @@ function netConnect(){
   NET.port = Number(el('net-port')?el('net-port').value:NET.port)||8420;
   NET.deviceName = val('net-devname')||NET.deviceName;
   if(!NET.serverIp){ toast('⚠ Server IP Address போடுங்க'); return; }
-  NET.mode='client'; netSaveConfig();
-  netCheckNow();
+  NET.mode='client'; NET.activeIp=''; NET.everSynced=false; netSaveConfig();
+  netCheckNow(true);
   netRenderPanelUI();
 }
-function netBaseUrl(){ return 'http://'+NET.serverIp+':'+NET.port; }
-function netCheckNow(){
-  if(NET.mode!=='client') return;
-  fetch(netBaseUrl()+'/api/ping',{cache:'no-store'}).then(function(r){return r.json();}).then(function(d){
-    NET.connected=true; NET._lastSyncAt=Date.now();
-    // Push (not pull) is the safe direction here: if nothing changed
-    // locally it's a harmless no-op sync; if this PC made changes while
-    // offline, pushing (with our old version) triggers a 409 which
-    // netMergeAndRetry() resolves by merging BOTH sides — so nothing
-    // typed while offline is ever lost when the connection returns.
-    netPushState();
-  }).catch(function(){
-    NET.connected=false; netRenderPanelUI();
+function netBaseUrl(){ return 'http://'+(NET.activeIp||NET.serverIp)+':'+NET.port; }
+// Server IP box accepts several addresses (e.g. the Server's Wi-Fi IP AND its Ethernet IP),
+// comma/space separated. All are probed in parallel; the first that answers is used.
+function netServerList(){
+  return String(NET.serverIp||'').split(/[\s,;]+/).map(function(x){return x.trim();})
+    .filter(function(x){ return /^[A-Za-z0-9.\-]+$/.test(x); })
+    .filter(function(x,i,a){ return a.indexOf(x)===i; });
+}
+function netFetch(ip, path, opts){
+  opts=opts||{};
+  var ctrl=(typeof AbortController!=='undefined')?new AbortController():null;
+  var t=setTimeout(function(){ if(ctrl) ctrl.abort(); }, opts.timeout||4000);
+  var headers=Object.assign({'X-Device-Id':getDeviceId(),'X-Device-Name':encodeURIComponent(NET.deviceName||'')}, opts.headers||{});
+  return fetch('http://'+ip+':'+NET.port+path,{method:opts.method||'GET',headers:headers,body:opts.body,cache:'no-store',signal:ctrl?ctrl.signal:undefined})
+    .then(function(r){ clearTimeout(t); return r; }, function(e){ clearTimeout(t); throw e; });
+}
+function netPing(ip){
+  return netFetch(ip,'/api/ping',{timeout:2500}).then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
+    .then(function(d){ if(!d||d.ok!==true) throw new Error('bad reply'); NET.activeIp=ip; return d; });
+}
+function netFindServer(){
+  var list=netServerList();
+  if(!list.length) return Promise.reject(new Error('no server IP set'));
+  var first = (NET.activeIp && list.indexOf(NET.activeIp)>=0) ? netPing(NET.activeIp).catch(function(){ return null; }) : Promise.resolve(null);
+  return first.then(function(d){
+    if(d) return d;
+    return Promise.any(list.map(netPing)).catch(function(){ throw new Error('unreachable: '+list.join(', ')); });
   });
-  netRenderPanelUI();
+}
+function netCheckNow(manual){
+  if(NET.mode!=='client') return Promise.resolve();
+  if(NET.checking) return Promise.resolve();
+  if(manual!==true && Date.now()<NET._nextTryAt) return Promise.resolve();
+  NET.checking=true; netRenderPanelUI();
+  return netFindServer().then(function(d){
+    NET.connected=true; NET.failCount=0; NET._nextTryAt=0; NET.lastError='';
+    // First contact after start-up: always merge (never blindly pull) so offline work is kept.
+    if(NET.hasUnsynced || !NET.everSynced) return netPushState();
+    if(Number(d.version)!==NET.version) return netPullState();
+    NET._lastSyncAt=Date.now();
+  }).catch(function(e){
+    NET.connected=false; NET.activeIp=''; NET.failCount++;
+    NET.lastError=(e&&e.message)||String(e);
+    NET._nextTryAt=Date.now()+Math.min(30000, 3000*Math.pow(2,Math.min(NET.failCount,4)));
+  }).then(function(){ NET.checking=false; netRenderPanelUI(); });
 }
 function netPullState(){
-  if(NET.mode!=='client') return Promise.resolve();
-  return fetch(netBaseUrl()+'/api/state',{cache:'no-store'}).then(function(r){return r.json();}).then(function(d){
-    NET.connected=true; NET._lastSyncAt=Date.now();
-    if(!NET.pushInFlight && Number(d.version)!==NET.version){
-      DB=d.db; NET.version=Number(d.version); saveDBRaw();
-      netRerenderCurrentPane();
-    }
-    netRenderPanelUI();
-  }).catch(function(){ NET.connected=false; netRenderPanelUI(); });
+  if(NET.mode!=='client' || !NET.connected || !NET.activeIp) return Promise.resolve();
+  return netFetch(NET.activeIp,'/api/state',{timeout:30000}).then(function(r){ return r.json(); }).then(function(d){
+    if(!d || !d.db || !Array.isArray(d.db.invMain)) throw new Error('bad server reply');
+    if(NET.hasUnsynced || NET.pushInFlight) return; // never overwrite unsent local work
+    delete d.db.auth; d.db.pendingInvDeltas={};
+    DB=d.db; NET.version=Number(d.version); NET.everSynced=true; NET._lastSyncAt=Date.now(); NET.lastError='';
+    saveDBRaw(); netRerenderCurrentPane();
+  }).catch(function(e){ NET.connected=false; NET.lastError=(e&&e.message)||String(e); });
 }
-// Pushes the CURRENT in-memory DB up to the server. Retries once on a
-// version conflict by merging the server's fresh copy with anything
-// this PC added locally (matched by each table's unique key), so two
-// PCs adding DIFFERENT bills around the same moment both survive.
+// Pushes the CURRENT DB. Version conflict (409) → merge both sides (see netMergeAndRetry), push again.
 function netPushState(){
-  if(NET.mode!=='client' || !NET.connected) return Promise.resolve();
+  if(NET.mode!=='client' || !NET.connected || !NET.activeIp) return Promise.resolve();
   if(NET.pushInFlight){ NET.pushQueued=true; return Promise.resolve(); }
-  NET.pushInFlight=true;
-  var body=JSON.stringify({baseVersion:NET.version, db:DB});
-  return fetch(netBaseUrl()+'/api/save',{method:'POST',headers:{'Content-Type':'application/json'},body:body})
-    .then(function(r){ return r.json().then(function(d){ return {status:r.status, data:d}; }); })
+  NET.pushInFlight=true; netRenderPanelUI();
+  var seq=NET.saveSeq;
+  var sent=JSON.parse(JSON.stringify(DB.pendingInvDeltas||{}));
+  var out=Object.assign({},DB); out.pendingInvDeltas={}; delete out.auth; // device-local / local-only data never leaves this PC
+  var body=JSON.stringify({baseVersion:NET.everSynced?NET.version:0, db:out});
+  return netFetch(NET.activeIp,'/api/save',{method:'POST',headers:{'Content-Type':'application/json'},body:body,timeout:30000})
+    .then(function(r){ return r.json().then(function(d){ return {status:r.status,data:d}; }); })
     .then(function(res){
       NET.pushInFlight=false; NET._lastSyncAt=Date.now(); NET.connected=true;
-      if(res.status===200){
-        NET.version=res.data.version; NET.hasUnsynced=false;
-        // This exact DB (including any pending stock deltas already baked
-        // into it) has now been accepted by the Server, so it's safe to
-        // stop tracking those deltas as "unconfirmed".
-        if(DB.pendingInvDeltas && Object.keys(DB.pendingInvDeltas).length){ DB.pendingInvDeltas={}; saveDBRaw(); }
-      } else if(res.status===409){
-        netMergeAndRetry(res.data.db, res.data.version);
-        // BUGFIX: netMergeAndRetry() can pull local-only records into DB
-        // (this PC had bills/records the server didn't have yet). Those
-        // records only exist in this browser's local storage right now —
-        // the server has NOT accepted them. The old code cleared
-        // hasUnsynced here unconditionally, so the UI showed "synced"
-        // and no further push happened until some unrelated future edit
-        // triggered one — until then, this PC's just-merged data was
-        // silently stuck local-only and invisible to other PCs. Force an
-        // immediate re-push instead so the merged result actually reaches
-        // the server right away.
-        NET.pushQueued = true;
+      if(res.status===200 && res.data && res.data.ok){
+        NET.version=res.data.version; NET.everSynced=true; NET.lastError=''; NET.conflicts=0;
+        if(NET.saveSeq===seq){ NET.hasUnsynced=false; NET.pendingCount=0; }
+        var p=DB.pendingInvDeltas||{};
+        Object.keys(sent).forEach(function(k){ p[k]=(Number(p[k])||0)-sent[k]; if(!p[k]) delete p[k]; });
+        DB.pendingInvDeltas=p; saveDBRaw();
+        if(NET.saveSeq!==seq) NET.pushQueued=true;
+      } else if(res.status===409 && res.data && res.data.db){
+        NET.conflicts=(NET.conflicts||0)+1;
+        if(NET.conflicts>6){ NET.lastError='repeated sync conflicts — will retry'; NET.conflicts=0; }
+        else { netMergeAndRetry(res.data.db, res.data.version); NET.everSynced=true; NET.pushQueued=true; }
+      } else {
+        NET.lastError='server rejected data ('+res.status+')';
       }
-      if(NET.pushQueued){ NET.pushQueued=false; netPushState(); }
-      netRenderPanelUI();
+      if(NET.pushQueued){ NET.pushQueued=false; return netPushState(); }
     })
-    .catch(function(){ NET.pushInFlight=false; NET.connected=false; netRenderPanelUI(); });
+    .catch(function(e){ NET.pushInFlight=false; NET.connected=false; NET.activeIp=''; NET.lastError=(e&&e.message)||String(e); })
+    .then(function(){ netRenderPanelUI(); });
 }
 // Sub-arrays *inside* one Site Ledger record (matched by their own 'id')
 // that also need merging when the SAME site exists on both sides — see
@@ -1970,6 +2080,10 @@ function netPushState(){
 var SITE_SUBLIST_FIELDS = ['outBatches','inBatches','missingItems','payments'];
 function netMergeAndRetry(serverDB, serverVersion){
   var localDB=DB; DB=serverDB;
+  delete DB.auth; // credentials are device-local: never adopted from / merged with another PC
+  var srvPay={}, srvMiss={};
+  (DB.paymentLog||[]).forEach(function(p){ srvPay[p.id]=true; });
+  (DB.returns||[]).forEach(function(r){ (r.missing_log||[]).forEach(function(m){ srvMiss[m.id]=true; }); });
   Object.keys(ARRAY_KEY_MAP).forEach(function(field){
     var key=ARRAY_KEY_MAP[field];
     if(!Array.isArray(DB[field])) DB[field]=[];
@@ -2001,6 +2115,45 @@ function netMergeAndRetry(serverDB, serverVersion){
     });
   });
   ID_COUNTER_KEYS.forEach(function(k){ DB[k]=Math.max(Number(DB[k])||1, Number(localDB[k])||1); });
+  // Re-apply financial events made on THIS PC that the Server copy has not seen yet
+  // (a settlement changes an EXISTING record, which the plain union above cannot carry over).
+  (localDB.paymentLog||[]).forEach(function(p){
+    if(srvPay[p.id]) return;
+    var amt=Number(p.amount)||0;
+    if(p.kind==='BILL'){
+      var sb=DB.sales.find(function(x){ return x.bill_no===p.ref; });
+      if(sb && sb.status!=='RETURNED'){ sb.balance=Math.max(0,(Number(sb.balance)||0)-amt); sb.status=sb.balance<=0?'PAID':'PENDING'; }
+    } else if(p.kind==='RETURN'){
+      var rb=DB.returns.find(function(x){ return x.return_bill_no===p.ref; });
+      if(rb){ rb.final_balance=Math.max(0,(Number(rb.final_balance)||0)-amt); rb.additional_pay=(Number(rb.additional_pay)||0)+amt; rb.status=rb.final_balance<=0?'FULLY PAID':'BALANCE DUE'; }
+    } else if(p.kind==='MISSING_FINE'){
+      var rf=DB.returns.find(function(x){ return x.return_bill_no===p.ref; });
+      if(rf) rf.missing_fine_paid=Math.min(Number(rf.missing_fine)||0,(Number(rf.missing_fine_paid)||0)+amt);
+    }
+  });
+  (localDB.returns||[]).forEach(function(lr){
+    var sr=DB.returns.find(function(x){ return x.return_bill_no===lr.return_bill_no; });
+    if(!sr || sr===lr) return;
+    (lr.missing_log||[]).forEach(function(m){
+      if(srvMiss[m.id]) return;
+      if(!Array.isArray(sr.missing_log)) sr.missing_log=[];
+      sr.missing_log.push(m);
+      sr.missing_fine=(Number(sr.missing_fine)||0)+(Number(m.amount)||0);
+      sr.missing_fine_paid=(Number(sr.missing_fine_paid)||0)+(Number(m.paid)||0);
+      if(m.type==='restore') (m.items||[]).forEach(function(it){
+        var f=(sr.items||[]).find(function(ri){ return (ri.product||'').trim().toLowerCase()===String(it.name).trim().toLowerCase(); });
+        if(f) f.qty=(Number(f.qty)||0)+(Number(it.qty)||0); else (sr.items=sr.items||[]).push({product:it.name,qty:Number(it.qty)||0,group_type:it.group||'MAIN'});
+      });
+    });
+  });
+  // A return closes its dispatch bill — make sure a locally-made return did not leave the bill open here.
+  DB.returns.forEach(function(r){
+    var ob=DB.sales.find(function(x){ return x.bill_no===r.original_bill_no; });
+    if(ob && ob.status!=='RETURNED'){ ob.balance=0; ob.status='RETURNED'; }
+  });
+  if((DB.auditLog||[]).length>AUDIT_MAX) DB.auditLog.splice(0,DB.auditLog.length-AUDIT_MAX);
+  if((DB.paymentLog||[]).length>PAYLOG_MAX) DB.paymentLog.splice(0,DB.paymentLog.length-PAYLOG_MAX);
+  NET.hasUnsynced=true;
   // BUGFIX (network sync stock issue): re-apply this PC's own not-yet-
   // confirmed stock changes on top of the Server's copy we just adopted
   // above. Without this, any dispatch/return made on this PC right before
@@ -2019,7 +2172,8 @@ function netMergeAndRetry(serverDB, serverVersion){
   netRerenderCurrentPane();
 }
 function netAfterLocalSave(){
-  if(NET.mode==='client') NET.hasUnsynced=true;
+  NET.saveSeq=(NET.saveSeq||0)+1;
+  if(NET.mode==='client'){ NET.hasUnsynced=true; NET.pendingCount=(NET.pendingCount||0)+1; }
   // BUGFIX (dispatch on one PC not reachable for return on another PC):
   // NET.version used to be bumped ONLY inside the /api/save handler, i.e.
   // only when a CLIENT pushed something. If a bill was created directly
@@ -2042,6 +2196,9 @@ function netAfterLocalSave(){
 }
 function netRerenderCurrentPane(){
   try{
+    var ae=document.activeElement;
+    if(ae && /^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName)){ NET._needsRerender=true; return; } // don't wipe a form being typed in
+    NET._needsRerender=false;
     var activeTab = TAB_ORDER.find(function(t){ var p=el('pane-'+t); return p&&p.classList.contains('on'); });
     if(activeTab) swMain(activeTab);
     loadStock();
@@ -2061,7 +2218,9 @@ function netSyncBeforeCommit(){
 setInterval(function(){
   if(NET.mode==='client') netCheckNow();
   else if(NET.mode==='server') netRenderPanelUI();
+  if(NET._needsRerender) netRerenderCurrentPane();
 }, 3000);
+if(typeof window!=='undefined') window.addEventListener('online',function(){ NET._nextTryAt=0; NET.failCount=0; if(NET.mode==='client') netCheckNow(true); });
 netLoadConfig();
 setTimeout(netStartIfConfigured, 400); // let ALL_PRODUCTS / DOM settle first
 
@@ -2177,6 +2336,8 @@ function apiGetReturns(q){
           var key=(i.product||'').trim().toLowerCase();
           returnedByProduct[key]=(returnedByProduct[key]||0)+(Number(i.qty)||0);
         });
+        // items written off as LOST are resolved (not missing any more) but were never physically returned
+        (x.missing_log||[]).forEach(function(m){ if(m.type==='lost') (m.items||[]).forEach(function(i){ var k=String(i.name||'').trim().toLowerCase(); returnedByProduct[k]=(returnedByProduct[k]||0)+(Number(i.qty)||0); }); });
       });
       orig.items.forEach(function(si){
         var retQty = returnedByProduct[si.product.trim().toLowerCase()]||0;
@@ -2190,7 +2351,9 @@ function apiGetReturns(q){
       actualDays:r.actual_days, actualMonths:r.actual_months, calcType:r.calc_type||'daily',
       totalRental:r.total_rental, prevAdvance:r.prev_advance,
       additionalPay:r.additional_pay, finalBalance:r.final_balance,
-      status:r.status, notes:r.notes, items:retItems, missingItems:missingItems
+      status:r.status, notes:r.notes, items:retItems, missingItems:missingItems,
+      missingFine:Number(r.missing_fine)||0, missingFinePaid:Number(r.missing_fine_paid)||0,
+      missingFineDue:Math.max(0,(Number(r.missing_fine)||0)-(Number(r.missing_fine_paid)||0)), missingLog:r.missing_log||[]
     };
   });
 }
@@ -2203,10 +2366,11 @@ function apiGetPending(){
   var refRows = DB.returns.filter(function(r){ return (Number(r.final_balance)||0)<0; })
     .sort(function(a,b){return (a.final_balance||0)-(b.final_balance||0);});
   var disp = sRows.map(function(r){
-    return {billNo:r.bill_no,customer:r.customer,phone:r.phone,balance:Number(r.balance)||0,inDate:r.in_date,outDate:r.out_date,total:r.total,advance:r.advance,type:'DISPATCH',overdue:!!(r.in_date && new Date(r.in_date)<now)};
+    return {billNo:r.bill_no,customer:r.customer,phone:r.phone,address:r.address||'',balance:Number(r.balance)||0,inDate:r.in_date,outDate:r.out_date,total:r.total,advance:r.advance,days:r.days,months:r.months,createdAt:r.created_at,items:(r.items||[]).map(function(i){return {name:i.product,qty:i.qty};}),type:'DISPATCH',overdue:!!(r.in_date && new Date(r.in_date)<now)};
   });
   var ret = rRows.map(function(r){
-    return {billNo:r.return_bill_no,refBill:r.original_bill_no,customer:r.customer,phone:r.phone,balance:Number(r.final_balance)||0,inDate:r.return_date,type:'RETURN',overdue:true};
+    var ob=DB.sales.find(function(x){ return x.bill_no===r.original_bill_no; });
+    return {billNo:r.return_bill_no,refBill:r.original_bill_no,customer:r.customer,phone:r.phone,balance:Number(r.final_balance)||0,inDate:r.return_date,returnDate:r.return_date,outDate:ob?ob.out_date:null,items:(r.items||[]).map(function(i){return {name:i.product,qty:i.qty};}),actualDays:r.actual_days,actualMonths:r.actual_months,totalRental:r.total_rental,prevAdvance:r.prev_advance,additionalPay:r.additional_pay,status:r.status,type:'RETURN',overdue:true};
   });
   var ref = refRows.map(function(r){
     return {billNo:r.return_bill_no,refBill:r.original_bill_no,customer:r.customer,phone:r.phone,balance:Number(r.final_balance)||0,type:'REFUND'};
@@ -2236,7 +2400,10 @@ function apiGetPending(){
     return {billNo:x.site.site_no,siteId:x.site.id,customer:x.site.customer,phone:x.site.phone,balance:-x.totals.refundDue,type:'SITE'};
   });
   var all = disp.concat(ret).concat(site);
-  return {pending:all, refunds:ref.concat(siteRefunds), total: all.reduce(function(s,x){return s+x.balance;},0), count:all.length};
+  // Missing-item fines are a SEPARATE financial concept: never part of `all` / `total`.
+  var missingFines = DB.returns.map(function(r){ return {returnBillNo:r.return_bill_no,customer:r.customer,phone:r.phone,due:Math.max(0,(Number(r.missing_fine)||0)-(Number(r.missing_fine_paid)||0))}; }).filter(function(x){ return x.due>0.004; });
+  return {pending:all, refunds:ref.concat(siteRefunds), total: all.reduce(function(s,x){return s+x.balance;},0), count:all.length,
+          missingFines:missingFines, missingFineTotal:missingFines.reduce(function(s,x){return s+x.due;},0)};
 }
 
 function apiAddOrder(data){
@@ -2251,7 +2418,9 @@ function apiAddOrder(data){
     var clampedQty = Math.max(0, Math.min(Number(it.qty)||0, avail));
     return Object.assign({}, it, { qty: clampedQty, amount: calcItemAmount(clampedQty, Number(data.days)||1, Number(it.price)||0, Number(it.monthPrice)||0, data.calcType||'daily') });
   }).filter(function(it){ return it.qty>0; });
+  if(DB.sales.some(function(x){ return x.bill_no===data.billNo; })) return {status:'error', message:'Bill number already exists: '+data.billNo};
   var sale = {
+    uid: uid(), device: getDeviceId(),
     id: DB._sid++, bill_no:data.billNo, customer:data.customer, phone:data.phone, address:data.address||'',
     sheet_type:data.sheetType||'MAIN', out_date:data.outDate||'', in_date:data.inDate||'',
     days:Number(data.days)||0, months:Number(data.months)||0, calc_type:data.calcType||'daily',
@@ -2261,6 +2430,7 @@ function apiAddOrder(data){
     items: items.map(function(it){ return {product:it.name, qty:Number(it.qty)||0, price:Number(it.price)||0, month_price:Number(it.monthPrice)||0, rent_type:it.type||'per day', amount:Number(it.amount)||0, group_type:it.group||'MAIN'}; })
   };
   DB.sales.push(sale);
+  auditLog('BILL_CREATED','Dispatch bill for '+data.customer+' — ₹'+(Number(data.total)||0),data.billNo);
   items.forEach(function(it){ updateInv(it.name, it.group||'MAIN', 'out_qty', Number(it.qty)||0); });
   saveDB();
   return {status:'ok', billNo:data.billNo};
@@ -2268,7 +2438,9 @@ function apiAddOrder(data){
 function apiAddReturn(data){
   var items = data.items||[];
   var fb = Number(data.finalBalance)||0;
+  if(DB.returns.some(function(x){ return x.return_bill_no===data.returnBillNo; })) return {status:'error', message:'Return bill number already exists: '+data.returnBillNo};
   var ret = {
+    uid: uid(), device: getDeviceId(),
     id: DB._rid++, return_bill_no:data.returnBillNo, original_bill_no:data.originalBillNo,
     customer:data.customer, phone:data.phone, return_date: data.returnDate || new Date().toISOString(),
     actual_days:Number(data.actualDays)||0, actual_months:Number(data.actualMonths)||0, calc_type:data.calcType||'daily',
@@ -2278,6 +2450,7 @@ function apiAddReturn(data){
     items: items.map(function(it){ return {product:it.name, qty:Number(it.qty)||0, price:Number(it.price)||0, month_price:Number(it.monthPrice)||0, amount:Number(it.amount)||0, group_type:it.group||'MAIN'}; })
   };
   DB.returns.push(ret);
+  auditLog('RETURN_PROCESSED','Return for '+data.customer,data.returnBillNo);
   items.forEach(function(it){ updateInv(it.name, it.group||'MAIN', 'in_qty', Number(it.qty)||0); });
   var orig = DB.sales.find(function(s){ return s.bill_no===data.originalBillNo; });
   if(orig){
@@ -2296,19 +2469,46 @@ function apiAddReturn(data){
 function apiSettlePayment(data){
   var billNo=data.billNo, paid=Number(data.payAmount)||0, type=data.type;
   var oldBal=0, newBal=0;
+  if(!(paid>0) || !isFinite(paid)) return {status:'error', message:'Enter a valid payment amount'};
+  if(data.settleId && (DB.paymentLog||[]).some(function(p){ return p.id===data.settleId; })) return {status:'error', message:'This settlement was already recorded'};
   if(type==='RETURN'){
     var r = DB.returns.find(function(x){ return x.return_bill_no===billNo; });
     if(!r) return {status:'error', message:'Return bill not found: '+billNo};
-    oldBal=Number(r.final_balance)||0; newBal=Math.max(0,oldBal-paid);
-    r.final_balance=newBal; r.status = newBal<=0?'FULLY PAID':'BALANCE DUE';
+    oldBal=Number(r.final_balance)||0;
+    if(oldBal<=0) return {status:'error', message:'No balance due on this bill'};
+    if(paid>oldBal+0.005) return {status:'error', message:'Amount is more than the balance (₹'+fmt(oldBal)+')'};
+    newBal=Math.max(0,oldBal-paid);
+    r.final_balance=newBal; r.additional_pay=(Number(r.additional_pay)||0)+paid; r.status = newBal<=0?'FULLY PAID':'BALANCE DUE';
   } else {
     var s = DB.sales.find(function(x){ return x.bill_no===billNo; });
     if(!s) return {status:'error', message:'Bill not found: '+billNo};
-    oldBal=Number(s.balance)||0; newBal=Math.max(0,oldBal-paid);
+    oldBal=Number(s.balance)||0;
+    if(oldBal<=0) return {status:'error', message:'No balance due on this bill'};
+    if(paid>oldBal+0.005) return {status:'error', message:'Amount is more than the balance (₹'+fmt(oldBal)+')'};
+    newBal=Math.max(0,oldBal-paid);
     s.balance=newBal; s.status = newBal<=0?'PAID':'PENDING';
   }
+  if(!Array.isArray(DB.paymentLog)) DB.paymentLog=[];
+  DB.paymentLog.push({id:data.settleId||uid(), kind:type==='RETURN'?'RETURN':'BILL', ref:billNo, amount:paid, ts:new Date().toISOString(), device:getDeviceId(), notes:data.notes||''});
+  auditLog('PAYMENT','Settled ₹'+paid+' ('+(type==='RETURN'?'return':'dispatch')+' bill)',billNo);
   saveDB();
   return {status:'ok', billNo:billNo, oldBalance:oldBal, paid:paid, newBalance:newBal, status2:newBal<=0?'PAID':'PENDING'};
+}
+function apiSettleMissingFine(data){
+  var ret = DB.returns.find(function(x){ return x.return_bill_no===data.returnBillNo; });
+  if(!ret) return {status:'error', message:'Return bill not found'};
+  var due=Math.max(0,(Number(ret.missing_fine)||0)-(Number(ret.missing_fine_paid)||0));
+  var pay=Number(data.payAmount)||0;
+  if(!(pay>0) || !isFinite(pay)) return {status:'error', message:'Enter a valid amount'};
+  if(due<=0) return {status:'error', message:'No missing-item fine due'};
+  if(pay>due+0.005) return {status:'error', message:'Amount is more than the fine due (₹'+fmt(due)+')'};
+  if(data.settleId && (DB.paymentLog||[]).some(function(p){ return p.id===data.settleId; })) return {status:'error', message:'This settlement was already recorded'};
+  ret.missing_fine_paid=(Number(ret.missing_fine_paid)||0)+pay;
+  if(!Array.isArray(DB.paymentLog)) DB.paymentLog=[];
+  DB.paymentLog.push({id:data.settleId||uid(), kind:'MISSING_FINE', ref:data.returnBillNo, amount:pay, ts:new Date().toISOString(), device:getDeviceId(), notes:data.notes||''});
+  auditLog('MISSING_FINE_PAID','Missing fine ₹'+pay+' settled',data.returnBillNo);
+  saveDB();
+  return {status:'ok', paid:pay, newDue:Math.max(0,due-pay)};
 }
 function apiSettleMissingItems(data){
   var returnBillNo=data.returnBillNo, items=data.items||[], notes=data.notes;
@@ -2338,7 +2538,9 @@ function apiSettleMissingItems(data){
       var si = orig.items.find(function(x){ return x.product.trim().toLowerCase()===key; });
       var dispatched = si ? Number(si.qty)||0 : 0;
       var alreadyReturned = returnedByProduct[key]||0;
-      var stillMissing = Math.max(0, dispatched-alreadyReturned);
+      var lostQty=0;
+      DB.returns.filter(function(x){ return x.original_bill_no===ret.original_bill_no; }).forEach(function(x){ (x.missing_log||[]).forEach(function(m){ if(m.type==='lost') (m.items||[]).forEach(function(i){ if(String(i.name||'').trim().toLowerCase()===key) lostQty+=Number(i.qty)||0; }); }); });
+      var stillMissing = Math.max(0, dispatched-alreadyReturned-lostQty);
       return Object.assign({}, item, {qty: Math.min(Number(item.qty)||0, stillMissing)});
     }).filter(function(item){ return item.qty>0; });
   }
@@ -2372,7 +2574,8 @@ function apiSettleMissingItems(data){
       receiptItems.push({name:item.name, qty:qty, price:price, amount:amt, missing:0});
     });
   }
-  items.forEach(function(item){
+  // Restored items count as returned on the return record. LOST items do NOT (they never came back) — they live in missing_log only.
+  (chargeType==='rent' ? items : []).forEach(function(item){
     var pLow=item.name.trim().toLowerCase();
     var found=(ret.items||[]).find(function(ri){ return (ri.product||'').trim().toLowerCase()===pLow; });
     if(found){ found.qty = (Number(found.qty)||0) + Number(item.qty); }
@@ -2384,26 +2587,24 @@ function apiSettleMissingItems(data){
   if(addedAmount>0 && settleNow) label += ' [PAID ON THE SPOT]';
   var note = '['+label+': '+items.map(function(i){return i.name+'×'+i.qty;}).join(', ')+(notes?' — '+notes:'')+']';
   ret.notes = [ret.notes||'', note].filter(Boolean).join(' ');
-  if(addedAmount>0){
-    ret.final_balance = (Number(ret.final_balance)||0) + addedAmount;
-    // "Settle now" = the customer already handed over cash/UPI for this exact
-    // charge at the moment of restore, so there's no need for a second manual
-    // "Settle Balance" click afterwards. We record it as a real payment
-    // (additional_pay, so it still shows up in income/reports) and net it
-    // straight back out of final_balance — the charge and its payment land in
-    // the SAME transaction instead of being two separate time entries.
-    if(settleNow){
-      ret.additional_pay = (Number(ret.additional_pay)||0) + addedAmount;
-      ret.final_balance = Number(ret.final_balance) - addedAmount;
-    }
-  }
-  ret.status = Number(ret.final_balance)<=0 ? 'FULLY RETURNED' : 'BALANCE DUE';
+  // Missing-item charge is kept SEPARATE from the ordinary return balance (final_balance is untouched).
+  if(!Array.isArray(ret.missing_log)) ret.missing_log=[];
+  var paidNow = (settleNow && addedAmount>0) ? addedAmount : 0;
+  ret.missing_log.push({id:uid(), ts:new Date().toISOString(), date:resolveDate, type:chargeType==='fixed'?'lost':'restore',
+    items:items.map(function(i){ return {name:i.name, qty:Number(i.qty)||0, group:i.group||'MAIN'}; }),
+    amount:addedAmount, paid:paidNow, days:days, notes:notes||'', device:getDeviceId()});
+  ret.missing_fine=(Number(ret.missing_fine)||0)+addedAmount;
+  ret.missing_fine_paid=(Number(ret.missing_fine_paid)||0)+paidNow;
+  if(!Array.isArray(DB.paymentLog)) DB.paymentLog=[];
+  if(paidNow>0) DB.paymentLog.push({id:uid(), kind:'MISSING_FINE_ONSPOT', ref:returnBillNo, amount:paidNow, ts:new Date().toISOString(), device:getDeviceId(), notes:'paid on the spot'});
+  ret.status = Number(ret.final_balance)<=0 ? 'FULLY PAID' : 'BALANCE DUE';
+  auditLog(chargeType==='fixed'?'MISSING_LOST':'MISSING_RESTORED', items.map(function(i){return i.name+'×'+i.qty;}).join(', ')+' — ₹'+addedAmount, returnBillNo);
   saveDB();
   return {
     status:'ok', message: chargeType==='fixed' ? 'Marked as lost ✅' : 'Restored ✅',
     chargeType:chargeType, amountCharged:addedAmount, settledNow: settleNow && addedAmount>0,
     resolveDate:resolveDate, days:days,
-    receiptItems:receiptItems, newBalance:Number(ret.final_balance)||0,
+    receiptItems:receiptItems, newBalance:Number(ret.final_balance)||0, fineDue:Math.max(0,(Number(ret.missing_fine)||0)-(Number(ret.missing_fine_paid)||0)),
     returnBillNo:returnBillNo, originalBillNo:ret.original_bill_no,
     customer:ret.customer, phone:ret.phone, outDate: orig?orig.out_date:null
   };
@@ -3510,9 +3711,16 @@ function calcR(){
 }
 
 // ── VALIDATE ───────────────────────────────────────────────────
+function isValidPhone(p){
+  var d=String(p||'').replace(/[\s\-()]/g,'').replace(/^\+/,'');
+  if(d.length===12 && d.indexOf('91')===0) d=d.slice(2);
+  if(d.length===11 && d.charAt(0)==='0') d=d.slice(1);
+  return /^[6-9][0-9]{9}$/.test(d);
+}
 function valD(){
   if(!val('d-name')){toast('⚠ Enter customer name');return false;}
   if(!val('d-phone')){toast('⚠ Enter contact number');return false;}
+  if(!isValidPhone(val('d-phone'))){toast('⚠ Enter a valid 10-digit mobile number');return false;}
   if(!el('d-out').value){toast('⚠ Set OUT date');return false;}
   if(!el('d-in').value){toast('⚠ Set IN date');return false;}
   var c=calcD(); if(!c.ok){toast('⚠ IN date must be after OUT');return false;}
@@ -3523,6 +3731,7 @@ function valR(){
   if(!val('r-bill')){toast('⚠ Enter original bill number');return false;}
   if(!val('r-name')){toast('⚠ Enter customer name');return false;}
   if(!val('r-phone')){toast('⚠ Enter contact number');return false;}
+  if(!isValidPhone(val('r-phone'))){toast('⚠ Enter a valid 10-digit mobile number');return false;}
   if(!el('r-out').value){toast('⚠ Original OUT date missing — reselect the bill');return false;}
   if(!el('r-back').value){toast('⚠ Set return date');return false;}
   var c=calcR(); if(!c.ok){toast('⚠ Return date must be after OUT date');return false;}
@@ -4968,6 +5177,9 @@ function openBByNo(no){ curBill=_bcMap[no]; curMode='dispatch'; el('bill-content
 function openRByNo(no){ curBill=_rcMap[no]; curMode='return'; el('bill-content').innerHTML=mkHTML(curBill,true); el('bill-modal').style.display='block'; }
 
 // ── PENDING PANEL ─────────────────────────────────────────────
+function pcItems(items){ return (items||[]).map(function(i){ return esc(i.name)+' ×'+esc(i.qty); }).join(', ') || '—'; }
+function openPendingBill(no){ var b=DB.sales.find(function(x){ return x.bill_no===no; }); if(!b) return; _bcMap[no]=mapBill(b); openBByNo(no); }
+function openPendingReturn(no){ var r=apiGetReturns(no).find(function(x){ return x.returnBillNo===no; }); if(!r) return; _rcMap[no]=r; openRByNo(no); }
 function loadPending(){
   if(typeof refreshAlerts==='function') refreshAlerts();
   var pg=el('pending-grid'); if(!pg) return;
@@ -4981,6 +5193,7 @@ function loadPending(){
   el('st-od').textContent=od;
   el('st-tot').textContent='₹'+Number(d.total||0).toLocaleString('en-IN');
   el('st-ret').textContent=refunds.length>0?refunds.length+' refunds':'₹0';
+  if(el('st-mf')) el('st-mf').textContent='₹'+Number(d.missingFineTotal||0).toLocaleString('en-IN');
   var html='';
   var disp=all.filter(function(p){return p.type==='DISPATCH'||!p.type;});
   if(disp.length){
@@ -4992,9 +5205,16 @@ function loadPending(){
     // carry them through to bSettle()), so nothing is lost, just hidden
     // from this list view.
     html+=disp.map(function(p){
-      return '<div class="pc'+(p.overdue?' overdue':'')+'">'+
+      return '<div class="pc'+(p.overdue?' overdue':'')+'" style="cursor:pointer" onclick="openPendingBill(\''+esc(p.billNo)+'\')">'+
+        (p.overdue?'<span class="od-tag">OVERDUE</span>':'')+
+        '<div class="pc-name">👤 '+esc(p.customer)+'</div>'+
+        '<div class="pc-phone">📞 '+esc(p.phone)+(p.address?' | 📍 '+esc(p.address):'')+'</div>'+
+        '<div class="pc-bill">🧾 '+esc(p.billNo)+'</div>'+
+        '<div style="font-size:12px;margin-top:6px">📦 '+(pcItems(p.items))+'</div>'+
+        '<div style="font-size:11px;color:var(--mu);margin-top:6px;line-height:1.6">📤 Dispatched: '+fdt(p.outDate)+(p.createdAt?' (billed '+fdt(p.createdAt)+')':'')+'<br>📥 Expected return: '+fdt(p.inDate)+'<br>⏱ Period: '+(p.days||0)+'d / '+(p.months||0)+'mo &nbsp;|&nbsp; Total ₹'+fmt(p.total)+' &nbsp;|&nbsp; Advance ₹'+fmt(p.advance)+'</div>'+
         '<div class="pc-bal" style="color:var(--er)">₹ '+Number(p.balance).toLocaleString('en-IN')+'</div>'+
-        '<button data-bn="'+p.billNo+'" data-cust="'+esc(p.customer)+'" data-ph="'+esc(p.phone)+'" data-bal="'+p.balance+'" onclick="bSettle(this)" class="btn bt" style="margin-top:8px;width:100%;padding:7px">💳 Settle Now</button>'+
+        '<div style="font-size:11px;font-weight:700;color:'+(p.overdue?'var(--er)':'var(--wn)')+';margin-top:4px">'+(p.overdue?'⏰ OVERDUE — items still with customer':'⏳ DISPATCHED — awaiting return')+'</div>'+
+        '<div style="font-size:10.5px;color:var(--mu);margin-top:4px">ℹ Information only. Settle after the items are returned (Return Balance Due).</div>'+
         '</div>';
     }).join('');
   }
@@ -5005,9 +5225,15 @@ function loadPending(){
     // balance + Settle Now button, rest is dropped from the card (still
     // available in the Settle Payment popup via the button's data-* attrs).
     html+=retPend.map(function(p){
-      return '<div class="pc overdue">'+
+      return '<div class="pc overdue" style="cursor:pointer" onclick="openPendingReturn(\''+esc(p.billNo)+'\')">'+
+        '<div class="pc-name">👤 '+esc(p.customer)+'</div>'+
+        '<div class="pc-phone">📞 '+esc(p.phone)+'</div>'+
+        '<div class="pc-bill">🧾 '+esc(p.billNo)+' &nbsp;(Ref: '+esc(p.refBill)+')</div>'+
+        '<div style="font-size:12px;margin-top:6px">📦 Returned: '+pcItems(p.items)+'</div>'+
+        '<div style="font-size:11px;color:var(--mu);margin-top:6px;line-height:1.6">📤 Dispatched: '+fdt(p.outDate)+'<br>📥 Returned: '+fdt(p.returnDate)+'<br>⏱ Actual: '+(p.actualDays||0)+'d / '+(p.actualMonths||0)+'mo<br>Rental ₹'+fmt(p.totalRental)+' − Advance ₹'+fmt(p.prevAdvance)+' − Paid ₹'+fmt(p.additionalPay)+'</div>'+
         '<div class="pc-bal" style="color:var(--er)">₹ '+Number(p.balance).toLocaleString('en-IN')+'</div>'+
-        '<button data-bn="'+p.billNo+'" data-cust="'+esc(p.customer)+'" data-ph="'+esc(p.phone)+'" data-bal="'+p.balance+'" data-type="RETURN" onclick="bSettle(this)" class="btn bt" style="margin-top:8px;width:100%;padding:7px">💳 Settle Now</button>'+
+        '<div style="font-size:11px;font-weight:700;color:var(--wn);margin-top:4px">Status: '+esc(p.status||'BALANCE DUE')+'</div>'+
+        (p.balance>0?'<button data-bn="'+esc(p.billNo)+'" data-cust="'+esc(p.customer)+'" data-ph="'+esc(p.phone)+'" data-bal="'+p.balance+'" data-type="RETURN" onclick="event.stopPropagation();bSettle(this)" class="btn bt" style="margin-top:8px;width:100%;padding:7px">💳 Settle Now</button>':'')+
         '</div>';
     }).join('');
   }
@@ -5053,13 +5279,13 @@ function loadPending(){
 }
 
 // ── SETTLE PAYMENT ────────────────────────────────────────────
-var _smBillNo=null, _smType=null, _smMode='BILL';
+var _smBillNo=null, _smType=null, _smMode='BILL', _smBusy=false, _smSid=null;
 function bSettle(btn){
   var billNo=btn.getAttribute('data-bn');
   var cust=btn.getAttribute('data-cust');
   var phone=btn.getAttribute('data-ph');
   var bal=Number(btn.getAttribute('data-bal'))||0;
-  _smMode='BILL';
+  _smMode='BILL'; _smBusy=false; _smSid=uid();
   _smType=btn.getAttribute('data-type')||'DISPATCH';
   _smBillNo=billNo;
   el('sm-info').innerHTML=
@@ -5073,6 +5299,13 @@ function bSettle(btn){
   el('settle-modal').style.alignItems='center';
   el('settle-modal').style.justifyContent='center';
   setTimeout(function(){el('sm-amt').focus();},100);
+}
+function bSettleFine(btn){
+  var billNo=btn.getAttribute('data-bn'), bal=Number(btn.getAttribute('data-bal'))||0;
+  _smMode='MISSFINE'; _smBusy=false; _smSid=uid(); _smBillNo=billNo;
+  el('sm-info').innerHTML='<div style="color:var(--tl-d);font-weight:700;font-size:14px;margin-bottom:6px">🧾 '+esc(billNo)+'</div>👤 '+esc(btn.getAttribute('data-cust'))+' &nbsp; 📞 '+esc(btn.getAttribute('data-ph'))+'<br><span style="color:var(--wn);font-weight:700;font-size:16px;margin-top:4px;display:block">⚠ Missing-item fine due: ₹'+bal.toLocaleString('en-IN')+'</span>';
+  el('sm-amt').value=bal; el('sm-notes').value=''; el('sm-result').style.display='none';
+  el('settle-modal').style.display='flex'; el('settle-modal').style.alignItems='center'; el('settle-modal').style.justifyContent='center';
 }
 function siteSettlePayment(){
   var site=findSiteById(curSiteId); if(!site) return;
@@ -5101,7 +5334,7 @@ function siteSettlePayment(){
   el('settle-modal').style.justifyContent='center';
   setTimeout(function(){el('sm-amt').focus();},100);
 }
-function smClose(){ el('settle-modal').style.display='none'; _smBillNo=null; _smMode='BILL'; }
+function smClose(){ el('settle-modal').style.display='none'; _smBillNo=null; _smMode='BILL'; _smBusy=false; _smSid=null; }
 async function smSubmit(){
   if(!_smBillNo)return;
   var amt=parseFloat(el('sm-amt').value)||0;
@@ -5132,8 +5365,18 @@ async function smSubmit(){
     }
     return;
   }
-  var btn=el('sm-confirm-btn');
-  var d2=apiSettlePayment({billNo:_smBillNo,payAmount:amt,notes:notes,type:_smType||'DISPATCH'});
+  if(_smBusy) return; _smBusy=true; // block double-click / double-submit
+  if(_smMode==='MISSFINE'){
+    var df=apiSettleMissingFine({returnBillNo:_smBillNo,payAmount:amt,notes:notes,settleId:_smSid});
+    res.style.display='block';
+    if(df.status==='ok'){
+      res.style.background='rgba(22,163,74,.12)'; res.style.color='var(--ok)';
+      res.textContent=df.newDue<=0?'✅ Missing fine fully settled.':'⚠ Partial. Fine still due: ₹'+Number(df.newDue).toLocaleString('en-IN');
+      setTimeout(function(){ smClose(); loadMissing(); loadPending(); },1200);
+    } else { _smBusy=false; res.style.background='rgba(220,38,38,.12)'; res.style.color='var(--er)'; res.textContent='⚠ '+(df.message||'Unknown error'); }
+    return;
+  }
+  var d2=apiSettlePayment({billNo:_smBillNo,payAmount:amt,notes:notes,type:_smType||'DISPATCH',settleId:_smSid});
   res.style.display='block';
   if(d2.status==='ok'){
     var paid2=Number(d2.newBalance)<=0;
@@ -5143,7 +5386,7 @@ async function smSubmit(){
     setTimeout(function(){ smClose(); loadPending(); var mp=el('pane-missing'); if(mp&&mp.classList.contains('on'))loadMissing(); },1400);
   } else {
     res.style.background='rgba(220,38,38,.12)'; res.style.color='var(--er)';
-    res.textContent='⚠ '+(d2.message||'Unknown error');
+    _smBusy=false; res.textContent='⚠ '+(d2.message||'Unknown error');
   }
 }
 document.getElementById('settle-modal') && document.getElementById('settle-modal').addEventListener('click',function(e){ if(e.target===this) smClose(); });
@@ -5152,76 +5395,59 @@ document.getElementById('settle-modal') && document.getElementById('settle-modal
 var _missMap={};
 function loadMissing(){
   var grid=el('missing-grid');
+  // ONLY genuinely missing items and/or an unpaid missing-item fine. Ordinary return balances live in Pending.
   var rets=apiGetReturns('').filter(function(r){
-    return (r.missingItems&&r.missingItems.length>0) || Number(r.finalBalance)>0 || r.status==='BALANCE DUE';
+    return (r.missingItems&&r.missingItems.length>0) || r.missingFineDue>0.004;
   });
-  if(!rets.length){grid.innerHTML='<div class="empty">🎉 No missing materials or pending balances!</div>';return;}
+  if(!rets.length){grid.innerHTML='<div class="empty">🎉 No missing materials or unpaid missing fines!</div>';return;}
   _missMap={};
   rets.forEach(function(r){ var key=r.returnBillNo.replace(/[^a-zA-Z0-9]/g,'_'); _missMap[key]=r; });
   grid.innerHTML=rets.map(function(r){
     var key=r.returnBillNo.replace(/[^a-zA-Z0-9]/g,'_');
     var missItems=r.missingItems||[];
-    var fb=Number(r.finalBalance);
     var missHtml='';
     if(missItems.length){
       var rows=missItems.map(function(item,ii){
         return '<tr style="border-bottom:1px solid #f3e6c8">'+
-          '<td style="padding:7px 10px">'+item.name+'</td>'+
+          '<td style="padding:7px 10px">'+esc(item.name)+'</td>'+
           '<td style="padding:7px;text-align:center;color:var(--mu)">'+item.dispatched+'</td>'+
           '<td style="padding:7px;text-align:center;color:var(--ok)">'+item.returned+'</td>'+
           '<td style="padding:7px;text-align:center;color:var(--er);font-weight:700">⚠ '+item.missing+'</td>'+
-          '<td style="padding:7px;text-align:center">'+
-            '<input type="number" min="0" max="'+item.missing+'" value="'+item.missing+'" id="rqty_'+key+'_'+ii+'" '+
-            'oninput="updateMissRentPreview(\''+key+'\')" '+
-            'style="width:65px;text-align:center;padding:4px;font-size:12px">'+
-          '</td></tr>';
+          '<td style="padding:7px;text-align:center"><input type="number" min="0" max="'+item.missing+'" value="'+item.missing+'" id="rqty_'+key+'_'+ii+'" oninput="updateMissRentPreview(\''+key+'\')" style="width:65px;text-align:center;padding:4px;font-size:12px"></td></tr>';
       }).join('');
       missHtml=
-        '<div style="margin-top:12px">'+
-        '<div style="font-size:11px;color:var(--mu);text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px">⚠ Missing Items:</div>'+
-        '<table style="width:100%;border-collapse:collapse;font-size:12px">'+
-        '<tr style="background:#fff8ec">'+
-          '<th style="padding:7px 10px;text-align:left;color:var(--wn)">Product</th>'+
-          '<th style="padding:7px;text-align:center;color:var(--mu)">Dispatched</th>'+
-          '<th style="padding:7px;text-align:center;color:var(--ok)">Returned</th>'+
-          '<th style="padding:7px;text-align:center;color:var(--er)">Missing</th>'+
-          '<th style="padding:7px;text-align:center;color:var(--tl)">Restore Qty</th>'+
-        '</tr>'+rows+'</table>'+
+        '<div style="margin-top:12px"><div style="font-size:11px;color:var(--mu);text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px">⚠ Missing Items:</div>'+
+        '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px">'+
+        '<tr style="background:#fff8ec"><th style="padding:7px 10px;text-align:left;color:var(--wn)">Product</th><th style="padding:7px;text-align:center;color:var(--mu)">Dispatched</th><th style="padding:7px;text-align:center;color:var(--ok)">Returned</th><th style="padding:7px;text-align:center;color:var(--er)">Missing</th><th style="padding:7px;text-align:center;color:var(--tl)">Resolve Qty</th></tr>'+rows+'</table></div>'+
         '<div class="g2" style="margin-top:10px">'+
-          '<div class="fl"><label>Charge Type</label><select id="rct_'+key+'" onchange="toggleMissFixed(\''+key+'\')">'+
-            '<option value="rent">Normal rental (per day, until resolved)</option>'+
-            '<option value="fixed">One-time fixed amount (item lost)</option>'+
-          '</select></div>'+
+          '<div class="fl"><label>Charge Type</label><select id="rct_'+key+'" onchange="toggleMissFixed(\''+key+'\')"><option value="rent">Found later — normal rental (per day, until found)</option><option value="fixed">Lost — one-time fixed fine / replacement</option></select></div>'+
           '<div class="fl" id="rrw_'+key+'"><label>Found / Return Date</label><input type="date" id="rrd_'+key+'" value="'+td()+'" oninput="updateMissRentPreview(\''+key+'\')"></div>'+
-          '<div class="fl" id="rfw_'+key+'" style="display:none"><label>Total Fixed Amount (₹)</label><input type="number" id="rfa_'+key+'" min="0" placeholder="0"></div>'+
+          '<div class="fl" id="rfw_'+key+'" style="display:none"><label>Total Fixed Fine (₹)</label><input type="number" id="rfa_'+key+'" min="0" placeholder="0"></div>'+
         '</div>'+
         '<div id="rprev_'+key+'" style="margin-top:8px;font-size:12px;color:var(--tl-d);font-weight:600"></div>'+
-        '<label style="display:flex;align-items:center;gap:6px;margin-top:10px;font-size:12px;color:var(--tl-d);cursor:pointer">'+
-          '<input type="checkbox" id="rpaidnow_'+key+'" style="width:15px;height:15px"> 💰 Customer paid this amount now (settle immediately — no separate Settle Balance step needed)'+
-        '</label>'+
-        '<div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">'+
-          '<button id="rbtn_'+key+'" class="do-restore-btn btn bg" data-key="'+key+'" style="padding:8px 18px">✅ Restore to Inventory</button>'+
-          '<input placeholder="Notes (optional)" id="rnotes_'+key+'" style="flex:1;min-width:140px;padding:8px 12px;font-size:12px">'+
-        '</div></div>';
+        '<label style="display:flex;align-items:center;gap:6px;margin-top:10px;font-size:12px;color:var(--tl-d);cursor:pointer"><input type="checkbox" id="rpaidnow_'+key+'" style="width:15px;height:15px"> 💰 Customer paid this missing charge now</label>'+
+        '<div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap"><button id="rbtn_'+key+'" class="do-restore-btn btn bg" data-key="'+key+'" style="padding:8px 18px">✅ Restore to Inventory</button>'+
+        '<input placeholder="Notes (optional)" id="rnotes_'+key+'" style="flex:1;min-width:140px;padding:8px 12px;font-size:12px"></div></div>';
+    }
+    var fineHtml='';
+    if(r.missingFine>0){
+      var hist=(r.missingLog||[]).map(function(m){ return '<div style="font-size:11px;color:var(--mu)">• '+fdt(m.ts)+' — '+(m.type==='lost'?'LOST':'RESTORED')+': '+(m.items||[]).map(function(i){return esc(i.name)+'×'+esc(i.qty);}).join(', ')+' — ₹'+fmt(m.amount)+(m.paid>0?' (paid on the spot)':'')+'</div>'; }).join('');
+      fineHtml='<div style="margin-top:12px;padding:10px 12px;background:#fff8ec;border:1px solid rgba(217,119,6,.35);border-radius:8px">'+
+        '<div style="font-size:11px;color:var(--mu);text-transform:uppercase;letter-spacing:.4px">Missing-item fine (separate from rental balance)</div>'+
+        '<div style="font-size:13px;margin-top:4px">Charged ₹'+fmt(r.missingFine)+' &nbsp;|&nbsp; Paid ₹'+fmt(r.missingFinePaid)+' &nbsp;|&nbsp; <b style="color:'+(r.missingFineDue>0?'var(--er)':'var(--ok)')+'">Due ₹'+fmt(r.missingFineDue)+'</b></div>'+hist+
+        (r.missingFineDue>0.004?'<button data-bn="'+esc(r.returnBillNo)+'" data-cust="'+esc(r.customer)+'" data-ph="'+esc(r.phone)+'" data-bal="'+r.missingFineDue+'" onclick="bSettleFine(this)" class="btn bt" style="margin-top:8px;width:100%;padding:8px">💳 Settle Missing Fine ₹'+fmt(r.missingFineDue)+'</button>':'')+
+        '</div>';
     }
     return '<div class="pc" style="border-color:rgba(217,119,6,.35);margin-bottom:16px" id="mcard_'+key+'">'+
-      '<div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px">'+
-        '<div>'+
-          '<div class="pc-name">👤 '+r.customer+'</div>'+
-          '<div class="pc-phone">📞 '+r.phone+'</div>'+
-          '<div class="pc-bill" style="color:var(--tl-d)">🧾 '+r.returnBillNo+'</div>'+
-          '<div style="font-size:11px;color:var(--mu)">Ref: '+r.originalBillNo+'</div>'+
-        '</div>'+
+      '<div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px"><div>'+
+          '<div class="pc-name">👤 '+esc(r.customer)+'</div><div class="pc-phone">📞 '+esc(r.phone)+'</div>'+
+          '<div class="pc-bill" style="color:var(--tl-d)">🧾 '+esc(r.returnBillNo)+'</div><div style="font-size:11px;color:var(--mu)">Ref: '+esc(r.originalBillNo)+'</div></div>'+
         '<div style="text-align:right;display:flex;flex-direction:column;gap:5px">'+
           (missItems.length?'<span style="background:rgba(220,38,38,.1);border:1px solid var(--er);border-radius:6px;padding:4px 10px;font-size:12px;color:var(--er);font-weight:700">⚠ '+missItems.length+' missing</span>':'')+
-          (fb>0?'<span style="background:rgba(217,119,6,.1);border:1px solid var(--wn);border-radius:6px;padding:4px 10px;font-size:12px;color:var(--wn);font-weight:700">💰 ₹'+fb.toLocaleString('en-IN')+' due</span>':'')+
+          (r.missingFineDue>0.004?'<span style="background:rgba(217,119,6,.1);border:1px solid var(--wn);border-radius:6px;padding:4px 10px;font-size:12px;color:var(--wn);font-weight:700">Fine due ₹'+fmt(r.missingFineDue)+'</span>':'')+
         '</div></div>'+
       '<div style="margin-top:8px;font-size:11px;color:var(--mu)">⏱ Returned: '+fdt(r.returnDate)+' | Actual: '+r.actualDays+'d / '+r.actualMonths+'mo</div>'+
-      missHtml+
-      (fb>0
-        ?'<button data-bn="'+r.returnBillNo+'" data-cust="'+esc(r.customer)+'" data-ph="'+esc(r.phone)+'" data-bal="'+fb+'" data-type="RETURN" onclick="bSettle(this)" class="btn bt" style="margin-top:10px;width:100%;padding:8px">💳 Settle Balance ₹'+fb.toLocaleString('en-IN')+'</button>'
-        :'')+
-      '</div>';
+      missHtml+fineHtml+'</div>';
   }).join('');
   rets.forEach(function(r){
     var key=r.returnBillNo.replace(/[^a-zA-Z0-9]/g,'_');
@@ -5310,7 +5536,7 @@ function doRestore(key){
     delete _missMap[key];
     loadStock();
     if(chargeType==='rent' && d.amountCharged>0) genMissingSettlementReceipt(d);
-    setTimeout(loadMissing,1200);
+    setTimeout(function(){ loadMissing(); loadPending(); },1200);
   } else {
     toast('⚠ '+(d.message||'Unknown error'));
     if(btn){btn.disabled=false;btn.textContent=chargeType==='fixed'?'💸 Mark as Lost (Fixed Charge)':'✅ Restore to Inventory';}
@@ -5328,7 +5554,7 @@ function genMissingSettlementReceipt(d){
     outDate: d.outDate, returnDate: d.resolveDate,
     actualDays: d.days, actualMonths: Math.max(1, Math.ceil((d.days||1)/30)),
     items: d.receiptItems, totalRental: d.amountCharged,
-    prevAdvance: 0, additionalPay: d.settledNow ? d.amountCharged : 0, finalBalance: d.newBalance
+    prevAdvance: 0, additionalPay: d.settledNow ? d.amountCharged : 0, finalBalance: d.fineDue
   };
   curMode='return';
   el('bill-content').innerHTML=mkHTML(curBill,true);
@@ -5366,6 +5592,8 @@ function fillEmpSelects(){
 function addCustomer(){
   var name=val('c-name'), phone=val('c-phone');
   if(!name||!phone){ toast('⚠ Contact name and phone are required'); return; }
+  if(!isValidPhone(phone)){ toast('⚠ Enter a valid 10-digit mobile number'); return; }
+  if(DB.customers.some(function(c){ return (c.phone||'').trim()===phone.trim(); })){ toast('⚠ A contact with this phone number already exists'); return; }
   DB.customers.push({id:DB._cid++, name:name, phone:phone, vehicle:val('c-vehicle'), address:val('c-addr'), notes:val('c-notes'), created_at:new Date().toISOString()});
   saveDB();
   ['c-name','c-phone','c-vehicle','c-addr','c-notes'].forEach(function(id){ if(el(id)) el(id).value=''; });
@@ -5880,7 +6108,8 @@ function renderIncome(){
     return s + (x.status==='RETURNED' && r ? (Number(r.total_rental)||0) : (Number(x.total)||0));
   },0);
   var collected=DB.sales.filter(function(x){ return x.status!=='RETURNED'; }).reduce(function(s,x){ return s+((Number(x.total)||0)-(Number(x.balance)||0)); },0)
-    + Object.keys(latestRet).reduce(function(s,billNo){ var r=latestRet[billNo]; return s+(Number(r.prev_advance)||0)+(Number(r.additional_pay)||0); },0);
+    + Object.keys(latestRet).reduce(function(s,billNo){ var r=latestRet[billNo]; return s+(Number(r.prev_advance)||0)+(Number(r.additional_pay)||0); },0)
+    + DB.returns.reduce(function(s,r){ return s+(Number(r.missing_fine_paid)||0); },0); // missing-fine payments collected
   var rows=DB.incomes.slice().sort(function(a,b){ return (b.date||'').localeCompare(a.date||'') || b.id-a.id; });
   var otherTotal=rows.reduce(function(s,x){ return s+(Number(x.amount)||0); },0);
   el('inc-rental').textContent='₹'+fmt(rentalTotal);
@@ -5976,6 +6205,7 @@ function renderDashboard(period){
     {v:DB.employees.length, l:'Employees', c:'var(--pri-d)'},
     {v:presentToday, l:'Present Today', c:'var(--ok)'},
     {v:'₹'+fmt(pend.total), l:'Outstanding (Rentals)', c:'var(--er)'},
+    {v:'₹'+fmt(pend.missingFineTotal), l:'Missing Fines Due (separate)', c:'var(--wn)'},
     {v:'₹'+fmt(rentalTotal), l:'Total Rental Billed', c:'var(--tl-d)'},
     {v:'₹'+fmt(siteRentTotal), l:'Site Ledger Rent (All-time)', c:'var(--tl-d)'},
     {v:'₹'+fmt(sitePaidTotal), l:'Site Ledger Payments Received', c:'var(--ok)'},
@@ -5988,6 +6218,7 @@ function renderDashboard(period){
   }).join('');
 
   var alerts=[];
+  if(pend.missingFineTotal>0) alerts.push('⚠ ₹'+fmt(pend.missingFineTotal)+' missing-item fine unpaid (separate from rental balances).');
   if(pend.count>0) alerts.push('💰 '+pend.count+' bill(s) with pending balance — ₹'+fmt(pend.total)+' outstanding.');
   var overdueCount=pend.pending.filter(function(p){ return p.overdue; }).length;
   if(overdueCount>0) alerts.push('⏰ '+overdueCount+' bill(s) are overdue for return.');
@@ -6015,6 +6246,8 @@ var REPORTS=[
   {id:'attendance', label:'Employee Attendance'},
   {id:'payroll', label:'Payroll'},
   {id:'maintenance', label:'Equipment Condition'},
+  {id:'missingfines', label:'Missing Fines'},
+  {id:'audit', label:'Activity Log'},
   {id:'activity', label:'Rental Activity'}
 ];
 var curReport='income';
@@ -6059,6 +6292,10 @@ function showReport(id){
   } else if(id==='maintenance'){
     rows=DB.maintenance.slice().sort(function(a,b){ return (b.date||'').localeCompare(a.date||''); });
     html=reportTable(['Date','Equipment','Issue','Cost','Status'], rows.map(function(r){ return [fmtDate(r.date), r.item, r.issue, '₹'+fmt(r.cost), r.status]; }));
+  } else if(id==='missingfines'){
+    html=reportTable(['Return Bill','Customer','Phone','Charged','Paid','Due'], DB.returns.filter(function(r){ return (Number(r.missing_fine)||0)>0; }).map(function(r){ var c=Number(r.missing_fine)||0,p=Number(r.missing_fine_paid)||0; return [r.return_bill_no,r.customer,r.phone,'₹'+fmt(c),'₹'+fmt(p),'₹'+fmt(Math.max(0,c-p))]; }));
+  } else if(id==='audit'){
+    html=reportTable(['Time','Device','Action','Details','Ref'], (DB.auditLog||[]).slice(-500).reverse().map(function(a){ return [fdt(a.ts), a.deviceName||String(a.device||'').slice(0,8), a.action, a.detail, a.ref||'']; }));
   } else if(id==='activity'){
     html='<div class="summary-stats">'+
       '<div class="stat-card"><div class="sv" style="color:var(--pri-d)">'+DB.sales.length+'</div><div class="sl">Dispatch Bills</div></div>'+
@@ -6071,31 +6308,77 @@ function showReport(id){
 // ══════════════════════════════════════════════════════════════
 // FULL JSON BACKUP / RESTORE
 // ══════════════════════════════════════════════════════════════
+function __backupDir(){
+  try{ if(!__nodeFS) return null; var d=require('path').join(require('path').dirname(__dataFilePath),'backups'); if(!__nodeFS.existsSync(d)) __nodeFS.mkdirSync(d,{recursive:true}); return d; }catch(e){ return null; }
+}
+function __writeBackupFile(prefix){
+  try{
+    var d=__backupDir(); if(!d) return null;
+    var stamp=new Date().toISOString().replace(/[:.]/g,'-');
+    var f=require('path').join(d, prefix+'_'+stamp+'.json');
+    var clean=Object.assign({},DB); delete clean.auth; clean.pendingInvDeltas={};
+    __nodeFS.writeFileSync(f, JSON.stringify(clean), 'utf8');
+    return f;
+  }catch(e){ console.error('backup failed',e); return null; }
+}
+function autoBackupTick(){
+  try{
+    var d=__backupDir(); if(!d) return;
+    var today=new Date().toISOString().slice(0,10);
+    if(LOCAL.lastAutoBackup===today) return;
+    var f=__writeBackupFile('SMC_Auto_'+today);
+    if(f){
+      LOCAL.lastAutoBackup=today; __lsSet('S_M_Centering_Local.json','vbcs_local_v1',LOCAL);
+      var files=__nodeFS.readdirSync(d).filter(function(n){ return /^SMC_Auto_/.test(n); }).sort();
+      while(files.length>14){ try{ __nodeFS.unlinkSync(require('path').join(d,files.shift())); }catch(e){ break; } }
+    }
+  }catch(e){ console.error('auto backup failed',e); }
+}
+setTimeout(autoBackupTick,5000); setInterval(autoBackupTick,60*60*1000);
 function exportBackup(){
-  var data=JSON.stringify(DB, null, 2);
+  var clean=Object.assign({},DB); delete clean.auth; clean.pendingInvDeltas={};
+  var data=JSON.stringify(clean, null, 2);
   var blob=new Blob([data], {type:'application/json'});
   var url=URL.createObjectURL(blob);
   var a=document.createElement('a');
   a.href=url; a.download='SMC_Full_Backup_'+new Date().toLocaleDateString('en-IN').replace(/\//g,'-')+'.json';
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
   URL.revokeObjectURL(url);
-  toast('✅ Full backup downloaded');
+  var f=__writeBackupFile('SMC_Manual');
+  auditLog('BACKUP','Manual backup created'); saveDB();
+  toast('✅ Full backup downloaded'+(f?' (copy saved in data\\backups)':''));
+}
+function __validateBackup(d){
+  if(!d || typeof d!=='object') return 'Not a backup file';
+  var arrs=['invMain','invSub','sales','returns'], i;
+  for(i=0;i<arrs.length;i++) if(!Array.isArray(d[arrs[i]])) return 'Missing or invalid "'+arrs[i]+'"';
+  var opt=['customers','employees','attendance','salaries','expenses','incomes','maintenance','sites'];
+  for(i=0;i<opt.length;i++) if(d[opt[i]]!==undefined && !Array.isArray(d[opt[i]])) return 'Invalid "'+opt[i]+'"';
+  for(i=0;i<d.sales.length;i++) if(!d.sales[i] || !d.sales[i].bill_no) return 'A dispatch bill has no bill number';
+  for(i=0;i<d.returns.length;i++) if(!d.returns[i] || !d.returns[i].return_bill_no) return 'A return bill has no bill number';
+  return '';
 }
 function importBackup(input){
   if(!input.files.length) return;
-  if(!confirm('This will replace ALL current data on this device with the backup file. Continue?')){ input.value=''; return; }
   var reader=new FileReader();
   reader.onload=function(ev){
     try{
       var d=JSON.parse(ev.target.result);
-      if(!d || !d.invMain || !d.invSub){ toast('⚠ Invalid backup file'); return; }
+      var bad=__validateBackup(d);
+      if(bad){ toast('⚠ Invalid backup: '+bad,5000); input.value=''; return; }
+      if(!confirm('Restore this backup?\n\nBills: '+d.sales.length+', Returns: '+d.returns.length+', Customers: '+(d.customers||[]).length+'\n\nAll current data on this device will be REPLACED. A safety copy of the current data is saved first.')){ input.value=''; return; }
+      var safety=__writeBackupFile('SMC_PreRestore');
+      if(__nodeFS && !safety){ toast('⚠ Could not create the safety backup — restore cancelled',5000); input.value=''; return; }
+      delete d.auth; d.pendingInvDeltas={};
       DB=d;
-      ['customers','employees','attendance','salaries','expenses','incomes','maintenance','sites'].forEach(function(k){ if(!Array.isArray(DB[k])) DB[k]=[]; });
+      ['customers','employees','attendance','salaries','expenses','incomes','maintenance','sites','auditLog','paymentLog'].forEach(function(k){ if(!Array.isArray(DB[k])) DB[k]=[]; });
       ['_sid','_rid','_cid','_eid','_aid','_slid','_exid','_inid','_mid','_stid','_bnid'].forEach(function(k){ if(typeof DB[k]!=='number') DB[k]=1; });
+      auditLog('BACKUP','Backup restored'+(safety?' (safety copy kept)':''));
       saveDB();
       toast('✅ Backup restored — reloading…');
       setTimeout(function(){ location.reload(); }, 1200);
     }catch(ex){ toast('⚠ Could not read backup file'); }
+    input.value='';
   };
   reader.readAsText(input.files[0]);
 }
@@ -6116,12 +6399,12 @@ function dlXL(){
   var sitems=[sih];
   (d.sales||[]).forEach(function(s){(s.sale_items||[]).forEach(function(i){sitems.push([s.bill_no,s.customer,s.out_date,i.product,i.qty,i.price,i.amount||0]);});});
   if(sitems.length>1) XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(sitems),'Sale Items');
-  var rh=['Return Bill','Orig Bill','Customer','Phone','Return Date','Actual Days','Total Rental','Prev Adv','Add Pay','Final Bal','Status','Notes','Items Returned','Missing Items'];
+  var rh=['Return Bill','Orig Bill','Customer','Phone','Return Date','Actual Days','Total Rental','Prev Adv','Add Pay','Final Bal','Status','Notes','Items Returned','Missing Items','Missing Fine Charged','Missing Fine Paid'];
   var rets=[rh].concat((d.returns||[]).map(function(r){
     var rStr=(r.return_items||[]).map(function(i){return i.product+'x'+i.qty;}).join(' | ');
     // BUGFIX: this column used to be hard-coded to '' — see apiGetExcelData().
     var missStr=(r.missing_items||[]).map(function(i){return i.name+' x'+i.missing;}).join(' | ');
-    return [r.return_bill_no,r.original_bill_no,r.customer,r.phone,r.return_date,r.actual_days,r.total_rental,r.prev_advance,r.additional_pay,r.final_balance,r.status,r.notes||'',rStr,missStr];
+    return [r.return_bill_no,r.original_bill_no,r.customer,r.phone,r.return_date,r.actual_days,r.total_rental,r.prev_advance,r.additional_pay,r.final_balance,r.status,r.notes||'',rStr,missStr,Number(r.missing_fine)||0,Number(r.missing_fine_paid)||0];
   }));
   XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(rets),'Returns');
   var rih=['Return Bill','Customer','Return Date','Product','Returned Qty'];
