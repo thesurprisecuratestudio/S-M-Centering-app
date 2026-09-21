@@ -1417,6 +1417,7 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
 <script>
 'use strict';
 var COMPANY = 'S M Centering';
+var __startupNotice = '';   // shown once after load (data recovery / read-only folder warnings)
 
 // ══════════════════════════════════════════════════════════════
 // LOCAL DATABASE (localStorage) — replaces Supabase + Vercel API
@@ -1438,6 +1439,19 @@ try{
     // drive root and never mixed in with the program files themselves.
     var __dataFolder = __ndPath.join(__dataDir, 'data');
     try{ if(!__nodeFS.existsSync(__dataFolder)) __nodeFS.mkdirSync(__dataFolder, {recursive:true}); }catch(e){}
+    // FIX: if the folder next to the .exe is read-only (Program Files, locked pen drive...)
+    // every save used to fail silently. Probe it, and fall back to a folder in the user's
+    // home directory so data is never lost, and tell the user.
+    var __probeOk = true;
+    try{ var __pf=__ndPath.join(__dataFolder,'.write_test'); __nodeFS.writeFileSync(__pf,'1'); __nodeFS.unlinkSync(__pf); }catch(e){ __probeOk=false; }
+    if(!__probeOk){
+      try{
+        var __altFolder=__ndPath.join(require('os').homedir(),'S_M_Centering','data');
+        __nodeFS.mkdirSync(__altFolder,{recursive:true});
+        __dataFolder=__altFolder;
+        __startupNotice='⚠ The folder next to the .exe is read-only, so data is being saved in: '+__altFolder+' — move the .exe to a normal folder (Desktop / D: drive) to keep data beside it.';
+      }catch(e2){}
+    }
     __dataFilePath = __ndPath.join(__dataFolder, 'S_M_Centering_Data.json');
     __alertFilePath = __ndPath.join(__dataFolder, 'S_M_Centering_AlertSettings.json');
     __netCfgFilePath = __ndPath.join(__dataFolder, 'S_M_Centering_NetworkConfig.json');
@@ -1513,6 +1527,8 @@ function freshDB(){
     _mid: 1,
     _stid: 1,
     _bnid: 1,
+    _invid: 1,
+    _siteid: 1,
     // Tracks stock-quantity changes (out_qty/in_qty) this PC has made
     // locally in CLIENT network-sync mode that the Server has not yet
     // confirmed. Needed so a version conflict merge (see netMergeAndRetry)
@@ -1525,38 +1541,85 @@ function freshDB(){
     paymentLog: []
   };
 }
-function loadDB(){
+// FIX (data loss): a damaged/half-written data file used to make loadDB() return null, after
+// which the app started from empty seed data and immediately OVERWROTE the damaged file —
+// permanently destroying every bill. Now the damaged file is always kept (CORRUPT_*.json) and
+// the newest valid copy (.tmp file or data\backups\*) is restored automatically.
+function __validDB(d){ return !!(d && typeof d==='object' && Array.isArray(d.invMain) && Array.isArray(d.invSub)); }
+function __tryParseDB(txt){ try{ var d=JSON.parse(txt); return __validDB(d) ? d : null; }catch(e){ return null; } }
+function __recoverCorruptDB(raw){
+  var stamp=new Date().toISOString().replace(/[:.]/g,'-');
   try{
-    var raw = __nodeFS ? __fileGet(__dataFilePath) : localStorage.getItem(DB_KEY);
-    if(!raw) return null;
-    var d = JSON.parse(raw);
-    if(!d || !d.invMain || !d.invSub) return null;
-    return d;
-  }catch(e){ return null; }
+    if(__nodeFS){
+      var pth=require('path'), dir=pth.dirname(__dataFilePath);
+      try{ __nodeFS.writeFileSync(pth.join(dir,'S_M_Centering_Data.CORRUPT_'+stamp+'.json'), raw, 'utf8'); }catch(e){}
+      var cands=[];
+      try{ if(__nodeFS.existsSync(__dataFilePath+'.tmp')) cands.push(__dataFilePath+'.tmp'); }catch(e){}
+      var bdir=pth.join(dir,'backups');
+      try{
+        if(__nodeFS.existsSync(bdir)){
+          __nodeFS.readdirSync(bdir).filter(function(n){ return /\.json$/i.test(n); }).map(function(n){
+            var p=pth.join(bdir,n); return {p:p, t:__nodeFS.statSync(p).mtimeMs};
+          }).sort(function(a,b){ return b.t-a.t; }).forEach(function(o){ cands.push(o.p); });
+        }
+      }catch(e){}
+      for(var i=0;i<cands.length;i++){
+        var d=__tryParseDB(__fileGet(cands[i]));
+        if(d){ __startupNotice='⚠ The data file was damaged — restored from '+pth.basename(cands[i])+'. The damaged file was kept as CORRUPT_*.json in the data folder. Please check your latest bills.'; return d; }
+      }
+      __startupNotice='⚠ The data file was damaged and no backup was found. The damaged file was kept in the data folder (CORRUPT_*.json) — do NOT delete it.';
+    } else {
+      try{ localStorage.setItem(DB_KEY+'_CORRUPT_'+stamp, raw); }catch(e){}
+      __startupNotice='⚠ Saved data was damaged; a copy of it was kept.';
+    }
+  }catch(e){}
+  return null;
+}
+function loadDB(){
+  var raw=null;
+  try{ raw = __nodeFS ? __fileGet(__dataFilePath) : localStorage.getItem(DB_KEY); }catch(e){ raw=null; }
+  if(raw===null || raw===undefined) return null;   // first run: no file yet
+  var d=__tryParseDB(raw);
+  if(d) return d;
+  return __recoverCorruptDB(raw);                   // exists but unreadable
 }
 var DB = loadDB();
 if(!DB){ DB = freshDB(); saveDBRaw(); }
+else if(__startupNotice){ saveDBRaw(); }            // heal the damaged main file with the restored copy
 // migrate older saved databases that predate the newer modules
 (function migrateDB(){
   var f=freshDB(); var changed=false;
   ['customers','employees','attendance','salaries','expenses','incomes','maintenance','sites'].forEach(function(k){
     if(!Array.isArray(DB[k])){ DB[k]=[]; changed=true; }
   });
-  ['_cid','_eid','_aid','_slid','_exid','_inid','_mid','_stid','_bnid'].forEach(function(k){
+  ['_cid','_eid','_aid','_slid','_exid','_inid','_mid','_stid','_bnid','_invid','_siteid'].forEach(function(k){
     if(typeof DB[k]!=='number'){ DB[k]=1; changed=true; }
   });
   if(!DB.pendingInvDeltas || typeof DB.pendingInvDeltas!=='object'){ DB.pendingInvDeltas={}; changed=true; }
   ['auditLog','paymentLog'].forEach(function(k){ if(!Array.isArray(DB[k])){ DB[k]=[]; changed=true; } });
   if(changed) saveDBRaw();
 })();
+// FIX: a database received from another PC (older/newer app version, or a damaged reply) could lack tables or
+// counters, and the first screen that touched them crashed (blank tabs on the server or client PC).
+function __normalizeDB(d){
+  ['sales','returns','invMain','invSub','customers','employees','attendance','salaries','expenses','incomes','maintenance','sites','auditLog','paymentLog'].forEach(function(k){ if(!Array.isArray(d[k])) d[k]=[]; });
+  ['_sid','_rid','_cid','_eid','_aid','_slid','_exid','_inid','_mid','_stid','_bnid','_invid','_siteid'].forEach(function(k){ if(typeof d[k]!=='number' || !(d[k]>=1)) d[k]=1; });
+  if(!d.pendingInvDeltas || typeof d.pendingInvDeltas!=='object') d.pendingInvDeltas={};
+  return d;
+}
 function saveDB(){
   try{
     var __json = JSON.stringify(DB);
-    if(__nodeFS){ __fileSet(__dataFilePath, __json); } else { localStorage.setItem(DB_KEY, __json); }
+    var __ok = true;
+    if(__nodeFS){ __ok = __fileSet(__dataFilePath, __json); } else { localStorage.setItem(DB_KEY, __json); }
+    // FIX: a failed disk write used to be ignored and saveDB() still returned true, so the
+    // user believed everything was saved.
+    if(!__ok) toast('⚠ DATA NOT SAVED to disk! Check free space / that the data folder is writable.', 9000);
     if(typeof netAfterLocalSave==='function') netAfterLocalSave();
-    return true;
+    return !!__ok;
   }catch(e){
     console.error('saveDB failed', e);
+    try{ toast('⚠ DATA NOT SAVED: '+(e&&e.message?e.message:'storage error'), 9000); }catch(e2){}
     return false;
   }
 }
@@ -1796,7 +1859,7 @@ var ARRAY_KEY_MAP = {
   salaries:'id', expenses:'id', incomes:'id', maintenance:'id', sites:'site_no',
   invMain:'id', invSub:'id'
 };
-var ID_COUNTER_KEYS = ['_sid','_rid','_cid','_eid','_aid','_slid','_exid','_inid','_mid','_stid','_bnid'];
+var ID_COUNTER_KEYS = ['_sid','_rid','_cid','_eid','_aid','_slid','_exid','_inid','_mid','_stid','_bnid','_invid','_siteid'];
 
 var NET = {
   mode:'off',           // 'off' | 'server' | 'client'
@@ -1941,7 +2004,7 @@ function netStartServer(){
         res.writeHead(200,{'Content-Type':'application/json'}); res.end(JSON.stringify({version:NET.version,db:DB})); return;
       }
       if(req.method==='POST' && req.url==='/api/save'){
-        var body='', tooBig=false; req.on('data',function(c){ if(tooBig) return; body+=c; if(body.length>150*1024*1024){ tooBig=true; res.writeHead(413,{'Content-Type':'application/json'}); res.end(JSON.stringify({ok:false,message:'too large'})); } });
+        var body='', tooBig=false; req.setEncoding('utf8'); /* FIX: without this a 3-byte Tamil character split across two network chunks was corrupted */ req.on('data',function(c){ if(tooBig) return; body+=c; if(body.length>150*1024*1024){ tooBig=true; res.writeHead(413,{'Content-Type':'application/json'}); res.end(JSON.stringify({ok:false,message:'too large'})); } });
         req.on('end',function(){
           if(tooBig) return;
           try{
@@ -1951,7 +2014,7 @@ function netStartServer(){
               res.writeHead(409,{'Content-Type':'application/json'});
               res.end(JSON.stringify({ok:false,version:NET.version,db:DB})); return;
             }
-            DB=payload.db; delete DB.auth; DB.pendingInvDeltas={}; saveDBRaw(); NET.version++;
+            DB=__normalizeDB(payload.db); delete DB.auth; DB.pendingInvDeltas={}; saveDBRaw(); NET.version++;
             res.writeHead(200,{'Content-Type':'application/json'});
             res.end(JSON.stringify({ok:true,version:NET.version}));
             netRenderPanelUI(); netRerenderCurrentPane();
@@ -1973,7 +2036,7 @@ function netStopServer(){
 // Writes DB to disk/localStorage WITHOUT re-triggering the client push loop
 // (used when the server itself just accepted a client's data).
 function saveDBRaw(){
-  try{ var j=JSON.stringify(DB); if(__nodeFS){ __fileSet(__dataFilePath,j); } else { localStorage.setItem(DB_KEY,j); } }catch(e){}
+  try{ var j=JSON.stringify(DB); if(__nodeFS){ if(!__fileSet(__dataFilePath,j)) toast('⚠ DATA NOT SAVED to disk! Check free space / that the data folder is writable.', 9000); } else { localStorage.setItem(DB_KEY,j); } }catch(e){}
 }
 
 // ── CLIENT MODE ──────────────────────────────────────────────────
@@ -2038,7 +2101,7 @@ function netPullState(){
     if(!d || !d.db || !Array.isArray(d.db.invMain)) throw new Error('bad server reply');
     if(NET.hasUnsynced || NET.pushInFlight) return; // never overwrite unsent local work
     delete d.db.auth; d.db.pendingInvDeltas={};
-    DB=d.db; NET.version=Number(d.version); NET.everSynced=true; NET._lastSyncAt=Date.now(); NET.lastError='';
+    DB=__normalizeDB(d.db); NET.version=Number(d.version); NET.everSynced=true; NET._lastSyncAt=Date.now(); NET.lastError='';
     saveDBRaw(); netRerenderCurrentPane();
   }).catch(function(e){ NET.connected=false; NET.lastError=(e&&e.message)||String(e); });
 }
@@ -2078,12 +2141,114 @@ function netPushState(){
 // that also need merging when the SAME site exists on both sides — see
 // BUGFIX note below.
 var SITE_SUBLIST_FIELDS = ['outBatches','inBatches','missingItems','payments'];
+// FIX: batch/payment ids are "array length + 1", so two PCs could number different records the
+// same. New records now carry a unique uid; merging matches on uid (legacy records keep id-matching).
+function __subKey(r){ return (r && r.uid) ? 'u:'+r.uid : 'i:'+(r && r.id); }
 function netMergeAndRetry(serverDB, serverVersion){
-  var localDB=DB; DB=serverDB;
+  var localDB=DB; DB=__normalizeDB(serverDB);
   delete DB.auth; // credentials are device-local: never adopted from / merged with another PC
   var srvPay={}, srvMiss={};
   (DB.paymentLog||[]).forEach(function(p){ srvPay[p.id]=true; });
   (DB.returns||[]).forEach(function(r){ (r.missing_log||[]).forEach(function(m){ srvMiss[m.id]=true; }); });
+  // FIX: bill numbers, site numbers and table ids come from a per-PC counter, so two PCs working at the same
+  // time (or one offline) could give DIFFERENT records the same number. The merge below treats "same number" as
+  // "same record", so one of them was silently dropped (or, for sites, glued onto the wrong customer).
+  // Records now carry a unique uid; when the numbers clash but the uids differ, the local one gets a new number.
+  (function resolveNumberClashes(){
+    function pad(n,w){ return String(n).padStart(w,'0'); }
+    var srvNo={};
+    (DB.sales||[]).forEach(function(x){ srvNo[x.bill_no]=x; });
+    (DB.returns||[]).forEach(function(x){ srvNo[x.return_bill_no]=x; });
+    function noUsed(bn){ return !!srvNo[bn] || (localDB.sales||[]).some(function(x){ return x.bill_no===bn; }) || (localDB.returns||[]).some(function(x){ return x.return_bill_no===bn; }); }
+    function freshBillNo(){
+      var n=Math.max(Number(DB._bnid)||0, Number(localDB._bnid)||0), bn;
+      do{ n++; bn='SMC-'+pad(n,6); }while(noUsed(bn));
+      DB._bnid=n; localDB._bnid=n; return bn;
+    }
+    function moveRefs(oldNo,newNo){ (localDB.paymentLog||[]).forEach(function(p){ if(p.ref===oldNo && !srvPay[p.id]) p.ref=newNo; }); }
+    (localDB.sales||[]).forEach(function(l){
+      var o=srvNo[l.bill_no];
+      if(l.uid && o && o.uid!==l.uid){
+        var old=l.bill_no, nw=freshBillNo(); l.bill_no=nw;
+        (localDB.returns||[]).forEach(function(r){ if(r.original_bill_no===old) r.original_bill_no=nw; });
+        moveRefs(old,nw);
+      }
+    });
+    (localDB.returns||[]).forEach(function(l){
+      var o=srvNo[l.return_bill_no];
+      if(l.uid && o && o.uid!==l.uid){
+        var old=l.return_bill_no, nw=freshBillNo(); l.return_bill_no=nw;
+        moveRefs(old,nw);
+      }
+    });
+    // sites
+    var srvSite={}, maxSid=0;
+    (DB.sites||[]).forEach(function(x){ srvSite[x.site_no]=x; if(Number(x.id)>maxSid) maxSid=Number(x.id); });
+    (localDB.sites||[]).forEach(function(l){
+      var o=srvSite[l.site_no];
+      if(l.uid && o && o.uid!==l.uid){
+        var n=Math.max(Number(DB._stid)||0, Number(localDB._stid)||0), no;
+        do{ no='SITE-'+pad(n,4); n++; }while(srvSite[no] || (localDB.sites||[]).some(function(x){ return x.site_no===no; }));
+        DB._stid=n; localDB._stid=n; l.site_no=no;
+      }
+    });
+    (localDB.sites||[]).forEach(function(l){
+      if(srvSite[l.site_no]) return;                       // same site exists on both sides
+      if((DB.sites||[]).some(function(x){ return x.id===l.id; })){
+        var m=maxSid; (localDB.sites||[]).forEach(function(x){ if(Number(x.id)>m) m=Number(x.id); });
+        l.id=m+1; maxSid=l.id; DB._siteid=Math.max(Number(DB._siteid)||1, l.id+1); localDB._siteid=DB._siteid;
+      }
+    });
+    // stock rows: two different new items may have got the same id; a product may have been renamed on the other PC
+    ['invMain','invSub'].forEach(function(tb){
+      var grp=tb==='invSub'?'SUB':'MAIN', srvRow={}, mxr=0;
+      (DB[tb]||[]).forEach(function(x){ srvRow[x.id]=x; if(Number(x.id)>mxr) mxr=Number(x.id); });
+      (localDB[tb]||[]).forEach(function(x){ if(Number(x.id)>mxr) mxr=Number(x.id); });
+      (localDB[tb]||[]).forEach(function(lr){
+        var sr=srvRow[lr.id]; if(!sr) return;
+        if(lr.uid && sr.uid && lr.uid!==sr.uid){                       // different items, same id -> new id for the local one
+          var oldId=lr.id; lr.id=++mxr;
+          var pd=localDB.pendingInvDeltas||{}, moved={};
+          Object.keys(pd).forEach(function(k){ var p=k.split('|'); if(p[0]===tb && Number(p[1])===oldId){ moved[[tb,lr.id,p[2]].join('|')]=pd[k]; delete pd[k]; } });
+          Object.keys(moved).forEach(function(k){ pd[k]=moved[k]; });
+          DB._invid=Math.max(Number(DB._invid)||1, lr.id+1); localDB._invid=DB._invid;
+        } else if(String(sr.product).trim().toLowerCase()!==String(lr.product).trim().toLowerCase()){
+          renameProductRefs(grp, lr.product, sr.product, localDB);     // server's name wins; this PC's records follow it
+        }
+      });
+    });
+    // the same NEW product added on both PCs (different ids): keep the server's row, move this PC's pending
+    // stock changes onto it (otherwise the product exists twice and dispatch/return mix the two rows up)
+    ['invMain','invSub'].forEach(function(tb){
+      var srvById={}; (DB[tb]||[]).forEach(function(x){ srvById[x.id]=x; });
+      var drop=[];
+      (localDB[tb]||[]).forEach(function(lr){
+        if(srvById[lr.id]) return;                                    // known to the server already
+        var nm=String(lr.product||'').trim().toLowerCase(), hit=null;
+        ['invMain','invSub'].forEach(function(t2){ if(hit) return; var f=(DB[t2]||[]).find(function(x){ return String(x.product||'').trim().toLowerCase()===nm; }); if(f) hit={tb:t2,row:f}; });
+        if(!hit) return;
+        var pd=localDB.pendingInvDeltas||{};
+        Object.keys(pd).forEach(function(k){ var p=k.split('|'); if(p[0]===tb && Number(p[1])===lr.id){ var nk=[hit.tb,hit.row.id,p[2]].join('|'); pd[nk]=(Number(pd[nk])||0)+(Number(pd[k])||0); delete pd[k]; } });
+        drop.push(lr);
+      });
+      if(drop.length) localDB[tb]=(localDB[tb]||[]).filter(function(x){ return drop.indexOf(x)<0; });
+    });
+    // plain tables keyed by numeric id
+    var CTR={employees:'_eid',customers:'_cid',attendance:'_aid',salaries:'_slid',expenses:'_exid',incomes:'_inid',maintenance:'_mid'};
+    ['employees','customers','attendance','salaries','expenses','incomes','maintenance'].forEach(function(f){
+      var srvById={}, mx=0;
+      (DB[f]||[]).forEach(function(x){ srvById[x.id]=x; if(Number(x.id)>mx) mx=Number(x.id); });
+      (localDB[f]||[]).forEach(function(x){ if(Number(x.id)>mx) mx=Number(x.id); });
+      (localDB[f]||[]).forEach(function(l){
+        var o=srvById[l.id];
+        if(l.uid && o && o.uid!==l.uid){
+          var old=l.id; l.id=++mx;
+          if(f==='employees'){ ['attendance','salaries'].forEach(function(g){ (localDB[g]||[]).forEach(function(x){ if(x.emp_id===old) x.emp_id=l.id; }); }); }
+          DB[CTR[f]]=Math.max(Number(DB[CTR[f]])||1, l.id+1); localDB[CTR[f]]=DB[CTR[f]];
+        }
+      });
+    });
+  })();
   Object.keys(ARRAY_KEY_MAP).forEach(function(field){
     var key=ARRAY_KEY_MAP[field];
     if(!Array.isArray(DB[field])) DB[field]=[];
@@ -2110,8 +2275,29 @@ function netMergeAndRetry(serverDB, serverVersion){
     SITE_SUBLIST_FIELDS.forEach(function(sub){
       if(!Array.isArray(serverSite[sub])) serverSite[sub]=[];
       if(!Array.isArray(localSite[sub])) return;
-      var haveIds={}; serverSite[sub].forEach(function(r){ haveIds[r.id]=true; });
-      localSite[sub].forEach(function(r){ if(!haveIds[r.id]){ serverSite[sub].push(r); haveIds[r.id]=true; } });
+      var haveKeys={}; serverSite[sub].forEach(function(r){ haveKeys[__subKey(r)]=true; });
+      localSite[sub].forEach(function(r){ var k=__subKey(r); if(!haveKeys[k]){ serverSite[sub].push(r); haveKeys[k]=true; } });
+      // two different records ended up with the same numeric id -> give the newer (uid) one a fresh id
+      var seenIds={}, mxId=0; serverSite[sub].forEach(function(r){ if(Number(r.id)>mxId) mxId=Number(r.id); });
+      serverSite[sub].forEach(function(r){ if(seenIds[r.id] && r.uid){ r.id=++mxId; } seenIds[r.id]=true; });
+      if(sub==='missingItems'){
+        // FIX: marking a missing item as found/settled changes an EXISTING record. The server's copy used to win,
+        // so the item stayed "missing" although this PC's stock change (item back in stock) was still applied.
+        var msrv={}; serverSite[sub].forEach(function(r){ msrv[__subKey(r)]=r; });
+        localSite[sub].forEach(function(lm){
+          var sm=msrv[__subKey(lm)]; if(!sm || !lm.resolved) return;
+          if(!sm.resolved){ sm.resolved=true; sm.resolvedDate=lm.resolvedDate; sm.resolvedRent=lm.resolvedRent; sm.resolveUid=lm.resolveUid; }
+          else if(lm.resolveUid && sm.resolveUid!==lm.resolveUid){
+            // settled on BOTH PCs: the item can only come back once, so drop this PC's stock addition
+            var order=(lm.group==='SUB')?['invSub','invMain']:['invMain','invSub'], done=false;
+            order.forEach(function(tb){
+              if(done) return;
+              var rw=(DB[tb]||[]).find(function(r){ return String(r.product).trim().toLowerCase()===String(lm.product).trim().toLowerCase(); });
+              if(rw){ done=true; var k=tb+'|'+rw.id+'|in_qty'; if(localDB.pendingInvDeltas && localDB.pendingInvDeltas[k]) localDB.pendingInvDeltas[k]-=(Number(lm.qty)||0); }
+            });
+          }
+        });
+      }
     });
   });
   ID_COUNTER_KEYS.forEach(function(k){ DB[k]=Math.max(Number(DB[k])||1, Number(localDB[k])||1); });
@@ -2122,13 +2308,10 @@ function netMergeAndRetry(serverDB, serverVersion){
     var amt=Number(p.amount)||0;
     if(p.kind==='BILL'){
       var sb=DB.sales.find(function(x){ return x.bill_no===p.ref; });
-      if(sb && sb.status!=='RETURNED'){ sb.balance=Math.max(0,(Number(sb.balance)||0)-amt); sb.status=sb.balance<=0?'PAID':'PENDING'; }
+      if(sb && localDB.sales.indexOf(sb)<0 && sb.status!=='RETURNED'){ /* FIX: skip bills that are new to the server (their balance already includes this payment) */ sb.balance=Math.max(0,(Number(sb.balance)||0)-amt); sb.status=sb.balance<=0?'PAID':'PENDING'; }
     } else if(p.kind==='RETURN'){
       var rb=DB.returns.find(function(x){ return x.return_bill_no===p.ref; });
-      if(rb){ rb.final_balance=Math.max(0,(Number(rb.final_balance)||0)-amt); rb.additional_pay=(Number(rb.additional_pay)||0)+amt; rb.status=rb.final_balance<=0?'FULLY PAID':'BALANCE DUE'; }
-    } else if(p.kind==='MISSING_FINE'){
-      var rf=DB.returns.find(function(x){ return x.return_bill_no===p.ref; });
-      if(rf) rf.missing_fine_paid=Math.min(Number(rf.missing_fine)||0,(Number(rf.missing_fine_paid)||0)+amt);
+      if(rb && localDB.returns.indexOf(rb)<0){ rb.final_balance=Math.max(0,(Number(rb.final_balance)||0)-amt); rb.additional_pay=(Number(rb.additional_pay)||0)+amt; rb.status=rb.final_balance<=0?'FULLY PAID':'BALANCE DUE'; }
     }
   });
   (localDB.returns||[]).forEach(function(lr){
@@ -2145,6 +2328,13 @@ function netMergeAndRetry(serverDB, serverVersion){
         if(f) f.qty=(Number(f.qty)||0)+(Number(it.qty)||0); else (sr.items=sr.items||[]).push({product:it.name,qty:Number(it.qty)||0,group_type:it.group||'MAIN'});
       });
     });
+  });
+  // FIX: fine payments are applied only now: the fine itself (missing_log above) must exist first, otherwise the
+  // payment was clamped to 0 and disappeared while it stayed in the payment log.
+  (localDB.paymentLog||[]).forEach(function(p){
+    if(srvPay[p.id] || p.kind!=='MISSING_FINE') return;
+    var rf=DB.returns.find(function(x){ return x.return_bill_no===p.ref; });
+    if(rf && localDB.returns.indexOf(rf)<0) rf.missing_fine_paid=Math.min(Number(rf.missing_fine)||0,(Number(rf.missing_fine_paid)||0)+(Number(p.amount)||0));
   });
   // A return closes its dispatch bill — make sure a locally-made return did not leave the bill open here.
   DB.returns.forEach(function(r){
@@ -2165,7 +2355,9 @@ function netMergeAndRetry(serverDB, serverVersion){
     var delta = Number(pending[key])||0;
     var tbl = DB[tblName];
     var row = tbl && tbl.find(function(r){ return r.id===rowId; });
-    if(row) row[field] = Math.max(0, (Number(row[field])||0) + delta);
+    // FIX: a stock row that is NEW to the server was copied over from this PC and already contains these changes -
+    // adding the pending change again counted every dispatch/return of a newly added product twice.
+    if(row && (localDB[tblName]||[]).indexOf(row)<0) row[field] = Math.max(0, (Number(row[field])||0) + delta);
   });
   DB.pendingInvDeltas = pending; // kept until the follow-up push (below) is confirmed
   NET.version=serverVersion; saveDBRaw();
@@ -2230,10 +2422,28 @@ function findInvRow(tbl, productName){
   var pLow=(productName||'').trim().toLowerCase();
   return tbl.find(function(r){ return (r.product||'').trim().toLowerCase()===pLow; }) || null;
 }
+// DEEP BUGFIX (inventory item id collision → corrupted Dispatch/Return):
+// this used to be Math.max(...existing ids)+1, recomputed fresh on every
+// call — fine on a single PC, but this app supports multi-PC Network Sync
+// (Server/Client). If two PCs each add a NEW stock item while both still
+// see the same prior max (e.g. before syncing, or right after a version
+// conflict), they independently compute the SAME "next" id — so after they
+// sync, two DIFFERENT products can end up sharing one id. Every quantity
+// input in Dispatch and Return is keyed by this id (dQty[p.id], rQty[p.id],
+// rDispatched[p.id], rPrice[p.id]...), so a collision silently makes
+// entering a quantity for one of those products interfere with the other
+// product sharing its id — corrupting Dispatch/Return for both items in a
+// way that's very hard to trace back to its cause. nextInvId is now backed
+// by a dedicated persistent counter (DB._invid) that can never repeat,
+// the same fix already applied to bill numbers (newBN) and sale/return
+// ids, and it participates in the network-merge max-protection
+// (ID_COUNTER_KEYS) so a sync can never roll it backward either. The
+// max-of-existing-ids check is kept as a floor for safety on old data.
 function nextInvId(){
   var all = DB.invMain.concat(DB.invSub);
   var mx=0; all.forEach(function(r){ if(r.id>mx) mx=r.id; });
-  return mx+1;
+  DB._invid = Math.max(Number(DB._invid)||1, mx+1);
+  return DB._invid++;
 }
 // BUGFIX (network sync stock issue): a version-conflict merge used to
 // replace this PC's ENTIRE invMain/invSub table with the Server's copy,
@@ -2412,12 +2622,19 @@ function apiAddOrder(data){
   // limits quantity to available stock, but re-checking here means a bad
   // or stale value can never push out_qty past what's actually on hand.
   var stockAll = getStockData('MAIN').concat(getStockData('SUB'));
+  var __short=[];
   items = items.map(function(it){
     var s = stockAll.find(function(x){ return x.name.trim().toLowerCase()===(it.name||'').trim().toLowerCase(); });
     var avail = s ? s.available : (Number(it.qty)||0);
+    if((Number(it.qty)||0) > avail) __short.push((it.name||'?')+' (only '+avail+' available)');
     var clampedQty = Math.max(0, Math.min(Number(it.qty)||0, avail));
     return Object.assign({}, it, { qty: clampedQty, amount: calcItemAmount(clampedQty, Number(data.days)||1, Number(it.price)||0, Number(it.monthPrice)||0, data.calcType||'daily') });
   }).filter(function(it){ return it.qty>0; });
+  // FIX: quantities used to be silently reduced while the bill TOTAL stayed for the full qty, and a
+  // bill with no items at all was saved. Now the bill is refused so total and items always match.
+  if(__short.length) return {status:'error', message:'Not enough stock: '+__short.join(', ')+'. Stock changed — re-check the quantities.'};
+  if(!items.length) return {status:'error', message:'No items to dispatch'};
+  if((Number(data.advance)||0)<0 || (Number(data.advance)||0) > (Number(data.total)||0)+0.005) return {status:'error', message:'Advance must be between 0 and the bill total'};
   if(DB.sales.some(function(x){ return x.bill_no===data.billNo; })) return {status:'error', message:'Bill number already exists: '+data.billNo};
   var sale = {
     uid: uid(), device: getDeviceId(),
@@ -2438,7 +2655,50 @@ function apiAddOrder(data){
 function apiAddReturn(data){
   var items = data.items||[];
   var fb = Number(data.finalBalance)||0;
+  if((Number(data.prevAdvance)||0)<0 || (Number(data.additionalPay)||0)<0) return {status:'error', message:'Advance / payment cannot be negative'};
   if(DB.returns.some(function(x){ return x.return_bill_no===data.returnBillNo; })) return {status:'error', message:'Return bill number already exists: '+data.returnBillNo};
+  // DEEP BUGFIX: unlike apiAddOrder (clamped to available stock) and
+  // apiSettleMissingItems (clamped to actual-still-missing qty), this
+  // function used to save whatever item quantities the client sent with
+  // NO server-side check against what was really still outstanding for
+  // that bill. The client-side "Dispatched" auto-fill (fillRet) also only
+  // subtracted qty from EARLIER RETURNS, never qty already written off as
+  // LOST via the Missing Materials tab — so once an item was marked lost
+  // (fixed-charge), the Return screen still let you "return" that same
+  // lost quantity all over again. Either gap alone lets a return push
+  // in_qty for a product past what was ever actually dispatched, which
+  // silently inflates "available stock" (Live Stock, Dispatch tab's max
+  // qty) for every product involved — a stock-count corruption that
+  // persists forever and is very hard to trace back to its cause. Now
+  // every item qty is clamped here to (dispatched − already returned
+  // across ALL prior returns of this bill − qty already resolved as
+  // LOST), the same "actual outstanding" math used elsewhere in the app,
+  // so a stale/bad client value can never corrupt stock or double-count
+  // a lost item as returned.
+  var origForClamp = DB.sales.find(function(s){ return s.bill_no===data.originalBillNo; });
+  if(origForClamp && origForClamp.items){
+    var returnedByProductC={}, lostByProductC={};
+    DB.returns.filter(function(x){ return x.original_bill_no===data.originalBillNo; }).forEach(function(x){
+      (x.items||[]).forEach(function(i){
+        var k=(i.product||'').trim().toLowerCase();
+        returnedByProductC[k]=(returnedByProductC[k]||0)+(Number(i.qty)||0);
+      });
+      (x.missing_log||[]).forEach(function(m){
+        if(m.type==='lost') (m.items||[]).forEach(function(i){
+          var k=String(i.name||'').trim().toLowerCase();
+          lostByProductC[k]=(lostByProductC[k]||0)+(Number(i.qty)||0);
+        });
+      });
+    });
+    items = items.map(function(it){
+      var key=(it.name||'').trim().toLowerCase();
+      var si = origForClamp.items.find(function(x){ return x.product.trim().toLowerCase()===key; });
+      var dispatched = si ? Number(si.qty)||0 : 0;
+      var stillOutstanding = Math.max(0, dispatched-(returnedByProductC[key]||0)-(lostByProductC[key]||0));
+      return Object.assign({}, it, { qty: Math.min(Number(it.qty)||0, stillOutstanding) });
+    }).filter(function(it){ return it.qty>0; });
+  }
+  if(!items.length) return {status:'error', message:'Nothing to return (already fully returned/settled, or invalid quantities)'};
   var ret = {
     uid: uid(), device: getDeviceId(),
     id: DB._rid++, return_bill_no:data.returnBillNo, original_bill_no:data.originalBillNo,
@@ -2514,6 +2774,7 @@ function apiSettleMissingItems(data){
   var returnBillNo=data.returnBillNo, items=data.items||[], notes=data.notes;
   var chargeType = data.chargeType==='fixed' ? 'fixed' : 'rent';
   var fixedAmount = Number(data.fixedAmount)||0;
+  if(chargeType==='fixed' && (!isFinite(fixedAmount) || fixedAmount<0)) return {status:'error', message:'Enter a valid charge amount (0 or more)'};   // FIX: a negative charge reduced the fine
   var resolveDate = data.resolveDate || td();
   var ret = DB.returns.find(function(r){ return r.return_bill_no===returnBillNo; });
   if(!ret) return {status:'error', message:'Return bill not found: '+returnBillNo};
@@ -2633,6 +2894,20 @@ function daysBetween(a,b){
 // Needed because apiAddReturn() zeroes the dispatch bill's own balance and
 // marks it RETURNED as soon as ANY return happens — after that, the
 // dispatch record's total/balance are stale estimates, not the real figures.
+// FIX: Income + Dashboard used only the LATEST return of a bill, so with partial returns the rent and
+// payments of the earlier returns disappeared. Rent and payments are now summed over ALL returns of
+// the bill; the advance is counted once per bill (largest prev_advance) so old double-advance data
+// is not inflated. Returns objects shaped like a return record so existing code keeps working.
+function billReturnTotals(){
+  var map={};
+  DB.returns.forEach(function(r){
+    var m=map[r.original_bill_no]||(map[r.original_bill_no]={total_rental:0, prev_advance:0, additional_pay:0});
+    m.total_rental+=Number(r.total_rental)||0;
+    m.prev_advance=Math.max(m.prev_advance, Number(r.prev_advance)||0);
+    m.additional_pay+=Number(r.additional_pay)||0;
+  });
+  return map;
+}
 function latestReturnByBill(){
   var map={};
   DB.returns.forEach(function(r){
@@ -2642,9 +2917,22 @@ function latestReturnByBill(){
 }
 function apiCreateSite(data){
   if(!data.customer||!data.phone) return {status:'error', message:'Customer name & phone required'};
+  // DEEP BUGFIX (site id collision → wrong site's ledger shown/edited):
+  // this used to be Math.max(...existing site ids)+1, recomputed fresh
+  // every call — the exact same flaw already fixed for bill numbers
+  // (newBN) and inventory item ids (nextInvId). On a single PC it's
+  // harmless, but on two PCs using Network Sync, creating a new site on
+  // each before they've synced can make both compute the SAME "next" id.
+  // findSiteById() does DB.sites.find(s => s.id===id), which returns the
+  // FIRST match — so after a sync, opening one customer's site could
+  // silently show and let you dispatch/return against a DIFFERENT
+  // customer's site ledger instead. Backed by a dedicated persistent
+  // counter (DB._siteid) now, same fix pattern, also protected across
+  // merges via ID_COUNTER_KEYS.
   var maxId=DB.sites.reduce(function(m,s){ return Math.max(m,s.id); },0);
+  DB._siteid = Math.max(Number(DB._siteid)||1, maxId+1);
   var site={
-    id: maxId+1,
+    id: DB._siteid++, uid: uid(),
     site_no: nextSiteNo(),
     customer:data.customer, phone:data.phone, address:data.address||'',
     created_at:new Date().toISOString(),
@@ -2770,7 +3058,16 @@ function computeSiteTotals(site){
     refundDue:Math.max(0,totalPayments-grandRent)
   };
 }
-function nextMissingId(site){ var maxId=(site.missingItems||[]).reduce(function(m,x){return Math.max(m,x.id);},0); return maxId+1; }
+// BUGFIX (same id-collision class as newBN/nextInvId/apiCreateSite): kept
+// as a max-of-existing floor for safety, but now also backed by a
+// persistent per-site counter (site._midctr) so repeated calls in the same
+// session can never hand out the same id twice even if missingItems hasn't
+// been saved yet.
+function nextMissingId(site){
+  var maxId=(site.missingItems||[]).reduce(function(m,x){return Math.max(m,x.id);},0);
+  site._midctr = Math.max(Number(site._midctr)||1, maxId+1);
+  return site._midctr++;
+}
 // Pure builder: given a site (real or cloned) and requested items, computes
 // current pending via computeSiteTotals, clamps quantities, and splits each
 // item's missing-qty across the oldest open lots (FIFO) so every record is
@@ -2804,7 +3101,7 @@ function buildMissingRecordsForItems(site, date, items){
         allocated += share;
       }
       created.push({
-        id: idCounter++,
+        id: idCounter++, uid: uid(),
         product: it.name, group: it.group||'MAIN', qty: take, price: lot.price,
         calcType: lot.calcType||'daily', monthPrice: lot.monthPrice||0,
         sourceDate: lot.date, markedDate: markDate,
@@ -2841,7 +3138,7 @@ function apiResolveMissingItem(siteId, missingId, returnDate){
   if(new Date(retDate) < new Date(rec.sourceDate)) return {status:'error', message:'Selected date is before the OUT date ('+fdt(rec.sourceDate)+')'};
   var days = daysBetween(rec.sourceDate, retDate);
   var rent = Math.round(calcItemAmount(rec.qty, days, rec.price, rec.monthPrice||0, rec.calcType||'daily'));
-  rec.resolved=true; rec.resolvedDate=retDate; rec.resolvedRent=rent;
+  rec.resolved=true; rec.resolvedDate=retDate; rec.resolvedRent=rent; rec.resolveUid=uid();
   updateInv(rec.product, rec.group||'MAIN', 'in_qty', rec.qty);
   saveDB();
   return {status:'ok', rent:rent};
@@ -2851,7 +3148,7 @@ function apiSettleSitePayment(siteId, amount, notes, date){
   var amt=Number(amount)||0;
   if(amt<=0) return {status:'error', message:'Enter a valid payment amount'};
   site.payments = site.payments || [];
-  site.payments.push({id:(site.payments.length+1), date:date||td(), amount:amt, notes:notes||''});
+  site.payments.push({id:(site.payments.length+1), uid:uid(), date:date||td(), amount:amt, notes:notes||''});
   saveDB();
   var t=computeSiteTotals(site);
   return {status:'ok', paid:amt, newBalance:t.balanceDue};
@@ -2861,14 +3158,18 @@ function apiAddSiteOut(siteId,date,items,expectedReturn){
   if(site.status!=='OPEN') return {status:'error', message:'Site is closed'};
   if(!items||!items.length) return {status:'error', message:'No items'};
   var stockAll = getStockData('MAIN').concat(getStockData('SUB'));
+  var __shortS=[];
   var clamped = items.map(function(it){
     var s = stockAll.find(function(x){ return x.name.trim().toLowerCase()===(it.name||'').trim().toLowerCase(); });
     var avail = s ? s.available : 0;
+    if((Number(it.qty)||0) > avail) __shortS.push((it.name||'?')+' (only '+avail+' available)');
     return Object.assign({}, it, { qty: Math.max(0, Math.min(Number(it.qty)||0, avail)) });
   }).filter(function(it){ return it.qty>0; });
+  // FIX: fewer pieces than typed used to be recorded silently; now the user is told and nothing is saved.
+  if(__shortS.length) return {status:'error', message:'Not enough stock: '+__shortS.join(', ')+'. Re-check the quantities.'};
   if(!clamped.length) return {status:'error', message:'Nothing to dispatch (exceeds available stock)'};
   site.outBatches.push({
-    id:(site.outBatches.length+1), date:date||td(), expected_return:expectedReturn||'',
+    id:(site.outBatches.length+1), uid:uid(), date:date||td(), expected_return:expectedReturn||'',
     items: clamped.map(function(it){ return {product:it.name, qty:Number(it.qty)||0, price:Number(it.price)||0, group:it.group||'MAIN', calc_type:it.calcType||'daily', month_price:Number(it.monthPrice)||0}; })
   });
   clamped.forEach(function(it){ updateInv(it.name, it.group||'MAIN', 'out_qty', Number(it.qty)||0); });
@@ -2914,7 +3215,7 @@ function apiAddSiteIn(siteId,date,items,payment,note,returnTime){
   });
   if(!clamped.length) return {status:'error', message:'Nothing to return (already fully returned or invalid quantities)'};
   site.inBatches.push({
-    id:(site.inBatches.length+1), date:retDate, time:retTime, note:note||'', payment:Number(payment)||0,
+    id:(site.inBatches.length+1), uid:uid(), date:retDate, time:retTime, note:note||'', payment:Number(payment)||0,
     rentCharged: Math.round(rentCharged),
     items: clamped.map(function(it){ return {product:it.name, qty:it.qty, group:it.group}; })
   });
@@ -2932,7 +3233,7 @@ function apiCloseSite(siteId){
   // closed anyway, after which apiGetPending()/Dashboard/Reports/Customers
   // only look at OPEN sites, so the unpaid balance silently vanished from
   // every outstanding-money screen in the app with no way to see it again.
-  if(totals.balanceDue>0) return {status:'error', message:'₹'+totals.balanceDue+' balance still due — settle payment before closing'};
+  if(totals.balanceDue>0) return {status:'error', message:'₹'+fmt(totals.balanceDue)+' balance still due — settle payment before closing'};
   site.status='CLOSED'; site.closed_at=new Date().toISOString();
   saveDB();
   return {status:'ok'};
@@ -2948,24 +3249,27 @@ function apiUploadXL(invMain, invSub){
   // "available stock" for everyone. Only the master Total Stock Qty is
   // safe to overwrite from an Excel re-upload; the transactional in/out
   // counters must be left as the live app (and network sync) computed them.
-  function syncTable(tbl, rows){
+  function syncTable(tbl, rows, otherTbl){
     if(!rows||!rows.length) return;
     rows.forEach(function(row){
       if(!row.product) return;
-      var pLow=row.product.trim().toLowerCase();
+      var pLow=String(row.product).trim().toLowerCase();
+      if(!pLow) return;
       var found=tbl.find(function(e){ return (e.product||'').trim().toLowerCase()===pLow; });
       if(found){
-        found.product = row.product.trim();
-        found.total_stock = Number(row.total_stock)||0;
+        found.product = String(row.product).trim();
+        found.total_stock = Math.max(0, Number(row.total_stock)||0);   // FIX: a negative number in the sheet made negative stock
+      } else if(otherTbl.some(function(e){ return (e.product||'').trim().toLowerCase()===pLow; })){
+        return;   // FIX: same name already in the OTHER inventory - do not create a duplicate
       } else {
         // Brand-new product: no bills reference it yet, so it's safe to
         // seed in_qty/out_qty from the spreadsheet's starting values.
-        tbl.push({id:nextInvId(), product:row.product.trim(), total_stock:Number(row.total_stock)||0, in_qty:Number(row.in_qty)||0, out_qty:Number(row.out_qty)||0});
+        tbl.push({id:nextInvId(), uid:uid(), product:String(row.product).trim(), total_stock:Math.max(0,Number(row.total_stock)||0), in_qty:Math.max(0,Number(row.in_qty)||0), out_qty:Math.max(0,Number(row.out_qty)||0)});
       }
     });
   }
-  if(invMain&&invMain.length) syncTable(DB.invMain, invMain);
-  if(invSub&&invSub.length) syncTable(DB.invSub, invSub);
+  if(invMain&&invMain.length) syncTable(DB.invMain, invMain, DB.invSub);
+  if(invSub&&invSub.length) syncTable(DB.invSub, invSub, DB.invMain);
   saveDB();
   return {status:'ok', message:'Inventory synced ✅'};
 }
@@ -3011,6 +3315,18 @@ function rebuildProductList(){
 var dQty={}, dPrice={};
 var rQty={}, rPrice={}, rDispatched={};
 var curBill=null, curMode='dispatch';
+// BUGFIX (dispatch/return bill number mismatch): "Preview Bill/Receipt" and
+// "Place Order/Process Return" are two separate buttons, and both used to
+// call buildDObj()/buildRObj() independently — each call ran newBN(), which
+// PERMANENTLY increments the persistent bill-number counter. So clicking
+// Preview (shown SMC-000010) and then Place (which built the object AGAIN,
+// getting SMC-000011) meant the number the staff/customer saw on preview was
+// never the number actually saved — it was silently burnt and can never be
+// found again in Search. These caches make buildDObj()/buildRObj() reuse the
+// SAME number across repeated preview/place calls for the same in-progress
+// bill; they're cleared on resetDForm()/resetRForm() (after a successful
+// save) so the next NEW bill gets a fresh number as before.
+var _pendingDBillNo=null, _pendingRBillNo=null;
 
 // ── HELPERS ────────────────────────────────────────────────────
 function el(id){return document.getElementById(id);}
@@ -3027,9 +3343,14 @@ function nowDT(){var n=new Date();n.setMinutes(n.getMinutes()-n.getTimezoneOffse
 // the FIRST match, so two bills sharing a number could silently mix up a
 // return with the wrong original bill. newBN() is now backed by a
 // dedicated persistent counter (DB._bnid) that can never repeat.
+function __bnTaken(bn){
+  return DB.sales.some(function(x){ return x.bill_no===bn; }) || DB.returns.some(function(x){ return x.return_bill_no===bn; });
+}
 function newBN(){
-  DB._bnid = (Number(DB._bnid)||0) + 1;
-  return 'SMC-'+String(DB._bnid).padStart(6,'0');
+  // FIX: also skips numbers already used by bills that arrived from another PC.
+  var bn;
+  do{ DB._bnid = (Number(DB._bnid)||0) + 1; bn='SMC-'+String(DB._bnid).padStart(6,'0'); }while(__bnTaken(bn));
+  return bn;
 }
 function fdt(s){
   if(!s)return '—';
@@ -3072,7 +3393,7 @@ function toISODate(v){
 function dur(out,inn){
   if(!out||!inn)return {days:0,months:0,ok:false};
   var ms=new Date(inn)-new Date(out);
-  if(ms<=0)return {days:0,months:0,ok:false};
+  if(ms<0)return {days:0,months:0,ok:false};   // FIX: same-day OUT/IN (ms==0) is a valid 1-day rental; it used to be refused, so a same-day return could not be recorded
   var d=Math.ceil(ms/86400000)+1;
   return {days:d,months:Math.ceil(d/30),ok:true};
 }
@@ -3179,6 +3500,8 @@ function computeDispatchDueAlerts(days,now){
   (DB.returns||[]).forEach(function(r){
     if(!r.original_bill_no) return;
     var q=(r.items||[]).reduce(function(sum,it){ return sum+(Number(it.qty)||0); },0);
+    // FIX: items written off as LOST are settled (charged) - they used to keep the return reminder ringing forever
+    (r.missing_log||[]).forEach(function(m){ if(m.type==='lost') (m.items||[]).forEach(function(it){ q+=Number(it.qty)||0; }); });
     returnedQtyByBill[r.original_bill_no]=(returnedQtyByBill[r.original_bill_no]||0)+q;
   });
   var out=[];
@@ -3290,15 +3613,15 @@ function renderAlertPanel(){
     var lbl= od ? ('🔴 Overdue by '+Math.abs(p.daysLeft)+' day(s)') : (p.daysLeft===0 ? '🟠 Due today' : ('🟡 Due in '+p.daysLeft+' day(s)'));
     if(p.kind==='SITE'){
       return '<div class="alert-item'+(od?' od':'')+'">'+
-        '<div style="font-weight:800">🏗️ '+p.billNo+' — '+p.customer+'</div>'+
-        '<div style="color:var(--mu)">📞 '+p.phone+' &nbsp; 📦 '+p.pendingQty+' pc(s) pending</div>'+
+        '<div style="font-weight:800">🏗️ '+esc(p.billNo)+' — '+esc(p.customer)+'</div>'+
+        '<div style="color:var(--mu)">📞 '+esc(p.phone)+' &nbsp; 📦 '+p.pendingQty+' pc(s) pending</div>'+
         '<div style="margin-top:4px">'+lbl+' &nbsp; <span style="color:var(--mu)">('+fdt(p.inDate)+')</span></div>'+
         '<button class="btn bo" style="margin-top:6px;padding:5px 9px;font-size:11px" onclick="swMain(\'sites\');openSite('+p.siteId+');toggleAlertPanel();">👁 View Site</button>'+
         '</div>';
     }
     return '<div class="alert-item'+(od?' od':'')+'">'+
-      '<div style="font-weight:800">👤 '+p.customer+'</div>'+
-      '<div style="color:var(--mu)">🧾 '+p.billNo+' &nbsp; 📞 '+p.phone+(p.pendingQty?' &nbsp; 📦 '+p.pendingQty+' pc(s)':'')+'</div>'+
+      '<div style="font-weight:800">👤 '+esc(p.customer)+'</div>'+
+      '<div style="color:var(--mu)">🧾 '+esc(p.billNo)+' &nbsp; 📞 '+esc(p.phone)+(p.pendingQty?' &nbsp; 📦 '+p.pendingQty+' pc(s)':'')+'</div>'+
       '<div style="margin-top:4px">'+lbl+' &nbsp; <span style="color:var(--mu)">('+fdt(p.inDate)+')</span></div>'+
       '</div>';
   }).join('');
@@ -3409,7 +3732,7 @@ function renderStockGrid(targetId, allStock){
     var pct=s.total>0?s.available/s.total:1;
     var cls=pct>0.5?'':pct>0.2?'mid':'low';
     return '<div class="sc">'+
-      '<div class="sc-name">'+s.name+'</div>'+
+      '<div class="sc-name">'+esc(s.name)+'</div>'+
       '<div class="sc-avail '+cls+'">'+s.available+' <span style="font-size:12px;font-weight:400">pcs</span></div>'+
       '<div class="sc-meta" style="margin-top:4px">Total: '+s.total+' pcs</div>'+
       (s.out>0?'<div style="font-size:11px;color:var(--er);margin-top:2px">⬆ Out: '+s.out+' pcs</div>':'')+
@@ -3439,8 +3762,9 @@ function addStockItem(){
   var total=Number(val('st-total'))||0;
   if(!name){ toast('⚠ Enter product name'); return; }
   var tbl = group==='SUB' ? DB.invSub : DB.invMain;
-  if(findInvRow(tbl, name)){ toast('⚠ This product already exists in that inventory'); return; }
-  tbl.push({id:nextInvId(), product:name.trim(), total_stock:Math.max(0,total), in_qty:0, out_qty:0});
+  // FIX: the same name in BOTH Main and Sub made the dispatch/return forms mix up the two stock rows.
+  if(findInvRow(DB.invMain, name) || findInvRow(DB.invSub, name)){ toast('⚠ This product name already exists (Main or Sub inventory)'); return; }
+  tbl.push({id:nextInvId(), uid:uid(), product:name.trim(), total_stock:Math.max(0,total), in_qty:0, out_qty:0});
   saveDB();
   ['st-name','st-total'].forEach(function(id){ if(el(id)) el(id).value=''; });
   toast('✅ Stock item added');
@@ -3484,6 +3808,21 @@ function renderStockManage(){
     });
   });
 }
+function renameProductRefs(group, oldName, newName, D){
+  D = D || DB;
+  var ok=String(oldName||'').trim().toLowerCase(); if(!ok) return;
+  var g=group==='SUB'?'SUB':'MAIN';
+  function hit(nm, grp){ return String(nm||'').trim().toLowerCase()===ok && (!grp || grp===g); }
+  (D.sales||[]).forEach(function(s){ (s.items||[]).forEach(function(i){ if(hit(i.product, i.group_type)) i.product=newName; }); });
+  (D.returns||[]).forEach(function(r){
+    (r.items||[]).forEach(function(i){ if(hit(i.product, i.group_type||i.group)) i.product=newName; });
+    (r.missing_log||[]).forEach(function(m){ (m.items||[]).forEach(function(i){ if(hit(i.name, i.group)) i.name=newName; }); });
+  });
+  (D.sites||[]).forEach(function(st){
+    ['outBatches','inBatches'].forEach(function(k){ (st[k]||[]).forEach(function(b){ (b.items||[]).forEach(function(i){ if(hit(i.product, i.group)) i.product=newName; }); }); });
+    (st.missingItems||[]).forEach(function(m){ if(hit(m.product, m.group)) m.product=newName; });
+  });
+}
 function saveStockItem(group, id){
   var rid=group+'-'+id;
   var nameInp=el('se-name-'+rid), totalInp=el('se-total-'+rid), outInp=el('se-out-'+rid), inInp=el('se-in-'+rid);
@@ -3496,8 +3835,12 @@ function saveStockItem(group, id){
   var tbl = group==='SUB' ? DB.invSub : DB.invMain;
   var row = tbl.find(function(r){ return r.id===id; });
   if(!row) return;
-  var dup = tbl.find(function(r){ return r.id!==id && (r.product||'').trim().toLowerCase()===name.toLowerCase(); });
-  if(dup){ toast('⚠ Another item with this name already exists'); return; }
+  var dup = DB.invMain.concat(DB.invSub).find(function(r){ return r!==row && (r.product||'').trim().toLowerCase()===name.toLowerCase(); });
+  if(dup){ toast('⚠ Another item with this name already exists (Main or Sub inventory)'); return; }
+  // FIX: bills, returns and site batches refer to a product BY NAME. Renaming only the stock row left every
+  // piece that was still out under the old name: a later return/restore then created a fresh row with total 0
+  // and the real stock/pending figures were lost. The name is now changed everywhere.
+  if((row.product||'').trim()!==name){ renameProductRefs(group, row.product, name); }
   row.product = name;
   row.total_stock = total;
   row.out_qty = out;
@@ -3521,7 +3864,7 @@ function resetStockItem(group, id){
   renderStockManage();
 }
 function resetAllStockMovements(){
-  if(!confirm('Reset Out &amp; In to 0 for EVERY stock item (Main + Sub)? Total Stock quantities are kept. This cannot be undone.')) return;
+  if(!confirm('Reset Out & In to 0 for EVERY stock item (Main + Sub)? Total Stock quantities are kept. This cannot be undone.')) return;
   DB.invMain.forEach(function(r){ r.out_qty=0; r.in_qty=0; });
   DB.invSub.forEach(function(r){ r.out_qty=0; r.in_qty=0; });
   saveDB();
@@ -3572,7 +3915,7 @@ function buildD(){
     var savedType=prevVals[p.id+'c']||dCalcType[p.id]||'daily';
     tr.innerHTML=
       '<td style="color:var(--mu)">'+(i+1)+'</td>'+
-      '<td><strong>'+p.name+'</strong></td>'+
+      '<td><strong>'+esc(p.name)+'</strong></td>'+
       '<td><span class="badge '+(p.stock>10?'b-ok':'b-lo')+'">'+p.stock+' pcs</span></td>'+
       '<td><input type="number" min="0" id="dp-'+p.id+'" placeholder="Rate/day" style="width:100px;text-align:center" oninput="autoMonthRate(\'dp-\',\'dm-\',\''+p.id+'\');calcD()"></td>'+
       '<td><select id="d-ctype-'+p.id+'" onchange="calcD()" style="width:150px">'+
@@ -3641,7 +3984,7 @@ function buildR(){
     var savedType=prevVals[p.id+'c']||rCalcType[p.id]||'daily';
     tr.innerHTML=
       '<td style="color:var(--mu)">'+(i+1)+'</td>'+
-      '<td><strong>'+p.name+'</strong></td>'+
+      '<td><strong>'+esc(p.name)+'</strong></td>'+
       '<td id="rd-'+p.id+'" style="color:var(--mu)">—</td>'+
       '<td><input type="number" min="0" id="rp-'+p.id+'" placeholder="Rate/day" style="width:100px;text-align:center" oninput="autoMonthRate(\'rp-\',\'rmo-\',\''+p.id+'\');calcR()"></td>'+
       '<td><select id="r-ctype-'+p.id+'" onchange="calcR()" style="width:150px">'+
@@ -3723,8 +4066,13 @@ function valD(){
   if(!isValidPhone(val('d-phone'))){toast('⚠ Enter a valid 10-digit mobile number');return false;}
   if(!el('d-out').value){toast('⚠ Set OUT date');return false;}
   if(!el('d-in').value){toast('⚠ Set IN date');return false;}
-  var c=calcD(); if(!c.ok){toast('⚠ IN date must be after OUT');return false;}
+  var c=calcD(); if(!c.ok){toast('⚠ IN date cannot be before OUT date');return false;}
   if(!ALL_PRODUCTS.some(function(p){return (dQty[p.id]||0)>0;})){toast('⚠ Enter qty for at least one product');return false;}
+  // FIX: negative advance / negative rates / advance larger than the bill were accepted and produced wrong bills
+  // (e.g. advance -500 raised the balance above the total; advance 99999 was counted as money collected).
+  if(ALL_PRODUCTS.some(function(p){ return (dQty[p.id]||0)>0 && ((parseFloat(el('dp-'+p.id)?el('dp-'+p.id).value:0)||0)<0 || (parseFloat(el('dm-'+p.id)?el('dm-'+p.id).value:0)||0)<0); })){toast('⚠ Rates cannot be negative');return false;}
+  if(c.adv<0){toast('⚠ Advance cannot be negative');return false;}
+  if(c.adv>c.total+0.005){toast('⚠ Advance (₹'+fmt(c.adv)+') is more than the bill total (₹'+fmt(c.total)+')');return false;}
   return true;
 }
 function valR(){
@@ -3734,8 +4082,11 @@ function valR(){
   if(!isValidPhone(val('r-phone'))){toast('⚠ Enter a valid 10-digit mobile number');return false;}
   if(!el('r-out').value){toast('⚠ Original OUT date missing — reselect the bill');return false;}
   if(!el('r-back').value){toast('⚠ Set return date');return false;}
-  var c=calcR(); if(!c.ok){toast('⚠ Return date must be after OUT date');return false;}
+  var c=calcR(); if(!c.ok){toast('⚠ Return date cannot be before OUT date');return false;}
   if(!ALL_PRODUCTS.some(function(p){return (rQty[p.id]||0)>0;})){toast('⚠ Enter return qty for at least one item');return false;}
+  if(ALL_PRODUCTS.some(function(p){ return (rQty[p.id]||0)>0 && ((parseFloat(el('rp-'+p.id)?el('rp-'+p.id).value:0)||0)<0 || (parseFloat(el('rmo-'+p.id)?el('rmo-'+p.id).value:0)||0)<0); })){toast('⚠ Rates cannot be negative');return false;}
+  if(c.prev<0){toast('⚠ Advance cannot be negative');return false;}
+  if(c.addP<0){toast('⚠ Additional payment cannot be negative');return false;}
   return true;
 }
 
@@ -3753,7 +4104,8 @@ function buildDObj(){
   var hasSub=items.some(function(i){return i.group==='SUB';});
   var sType=hasMain&&hasSub?'MAIN':hasSub?'SUB':'MAIN';
   var billCalcType=items.some(function(i){return i.type==='1 month + extra days';})?'monthly':'daily';
-  return {billNo:newBN(),date:(function(){var n=new Date();return String(n.getDate()).padStart(2,'0')+'-'+String(n.getMonth()+1).padStart(2,'0')+'-'+n.getFullYear();})(),
+  if(!_pendingDBillNo) _pendingDBillNo=newBN(); // reuse across Preview + Place so the saved bill matches what was shown
+  return {billNo:_pendingDBillNo,date:(function(){var n=new Date();return String(n.getDate()).padStart(2,'0')+'-'+String(n.getMonth()+1).padStart(2,'0')+'-'+n.getFullYear();})(),
     customer:val('d-name'),phone:val('d-phone'),address:val('d-addr'),
     outDate:el('d-out').value,inDate:el('d-in').value,days:c.days,months:c.months,calcType:billCalcType,
     items:items,total:c.total,advance:c.adv,balance:c.bal,sheetType:sType,action:'addOrder'};
@@ -3772,7 +4124,8 @@ function buildRObj(){
     return {name:p.name,qty:rQty[p.id],price:price,monthPrice:monthRate,type:ctype==='monthly'?'1 month + extra days':'per day',amount:amt,missing:miss,group:p.group};
   });
   var billCalcType=items.some(function(i){return i.type==='1 month + extra days';})?'monthly':'daily';
-  return {returnBillNo:newBN(),originalBillNo:val('r-bill'),
+  if(!_pendingRBillNo) _pendingRBillNo=newBN(); // reuse across Preview + Place so the saved return matches what was shown
+  return {returnBillNo:_pendingRBillNo,originalBillNo:val('r-bill'),
     date:(function(){var n=new Date();return String(n.getDate()).padStart(2,'0')+'-'+String(n.getMonth()+1).padStart(2,'0')+'-'+n.getFullYear();})(),
     customer:val('r-name'),phone:val('r-phone'),
     outDate:el('r-out').value,returnDate:el('r-back').value,returnTime:c.returnTime||'',
@@ -3788,9 +4141,10 @@ function previewR(){if(!valR())return;curBill=buildRObj();curMode='return';el('b
 async function placeD(){
   if(!valD())return;
   await netSyncBeforeCommit(); // Client mode: grab the freshest bill-no counter from Server first
+  if(_pendingDBillNo && __bnTaken(_pendingDBillNo)) _pendingDBillNo=null;   // number was used by another PC meanwhile
   curBill=buildDObj();curMode='dispatch';
   var r=apiAddOrder(curBill);
-  if(r.status!=='ok'){ toast('⚠ '+(r.message||'Error saving order')); return; }
+  if(r.status!=='ok'){ if(/already exists/i.test(r.message||'')) _pendingDBillNo=null; toast('⚠ '+(r.message||'Error saving order')); return; }
   if(NET.mode==='client' && NET.connected) netPushState(); // push this bill immediately, don't wait for the debounce
   toast('✅ Order saved! Generating PDF…');
   el('bill-content').innerHTML=mkHTML(curBill,false);
@@ -3802,9 +4156,10 @@ async function placeD(){
 async function placeR(){
   if(!valR())return;
   await netSyncBeforeCommit(); // Client mode: grab the freshest bill-no counter from Server first
+  if(_pendingRBillNo && __bnTaken(_pendingRBillNo)) _pendingRBillNo=null;
   curBill=buildRObj();curMode='return';
   var r=apiAddReturn(curBill);
-  if(r.status!=='ok'){ toast('⚠ '+(r.message||'Error saving return')); return; }
+  if(r.status!=='ok'){ if(/already exists/i.test(r.message||'')) _pendingRBillNo=null; toast('⚠ '+(r.message||'Error saving return')); return; }
   if(NET.mode==='client' && NET.connected) netPushState(); // push this bill immediately, don't wait for the debounce
   toast('✅ Return saved! Generating PDF…');
   el('bill-content').innerHTML=mkHTML(curBill,true);
@@ -3817,6 +4172,7 @@ function resetDForm(){
   el('d-name').value='';el('d-phone').value='';el('d-addr').value='';
   el('d-out').value='';el('d-in').value='';el('d-adv').value='';
   ALL_PRODUCTS.forEach(function(p){ dQty[p.id]=0; dPrice[p.id]=0; dCalcType[p.id]='daily'; });
+  _pendingDBillNo=null; // this bill is saved (or abandoned) — next Preview/Place gets a fresh number
   buildD();
 }
 function resetRForm(){
@@ -3826,6 +4182,7 @@ function resetRForm(){
   ALL_PRODUCTS.forEach(function(p){ rQty[p.id]=0; rDispatched[p.id]=0; rPrice[p.id]=0; rCalcType[p.id]='daily'; });
   el('r-back').value=td();
   if(el('r-back-time')) el('r-back-time').value=nowHM();
+  _pendingRBillNo=null; // this return is saved (or abandoned) — next Preview/Place gets a fresh number
   buildR();
   calcR();
 }
@@ -4450,7 +4807,7 @@ function renderSiteSalesInfo(period){
     (site.outBatches||[]).forEach(function(b,idx){
       if(!inPeriod(b.date, period)) return;
       var qty=b.items.reduce(function(s,i){return s+(Number(i.qty)||0);},0);
-      var amount=b.items.reduce(function(s,i){return s+(Number(i.qty)||0)*(Number(i.price)||0);},0);
+      var amount=b.items.reduce(function(s,i){return s+(Number(i.qty)||0)*(i.calc_type==='monthly' ? (Number(i.month_price)||0) : (Number(i.price)||0));},0);
       rows.push({date:b.date, site:site, idx:idx, qty:qty, amount:amount});
     });
   });
@@ -4823,8 +5180,8 @@ function showRetAC(bills){
   var list=el('r-ac'); if(!bills||!bills.length){list.style.display='none';return;}
   list.innerHTML=bills.map(function(b,i){
     return '<div class="ac-item" data-idx="'+i+'" onclick="retPick(this)">'+
-      '<div class="ac-no">'+b.billNo+'</div>'+
-      '<div class="ac-meta">👤 '+b.customer+' | 📞 '+b.phone+(Number(b.balance)>0?' | 🔴 ₹'+Number(b.balance).toLocaleString('en-IN'):'')+'</div></div>';
+      '<div class="ac-no">'+esc(b.billNo)+'</div>'+
+      '<div class="ac-meta">👤 '+esc(b.customer)+' | 📞 '+esc(b.phone)+(Number(b.balance)>0?' | 🔴 ₹'+Number(b.balance).toLocaleString('en-IN'):'')+'</div></div>';
   }).join('');
   list.style.display='block';
 }
@@ -4835,7 +5192,7 @@ function retPick(e){
 function retFetch(){
   var q=val('r-search'); if(!q){toast('⚠ Enter bill no / name / mobile');return;}
   var bills=apiGetBillById(q);
-  if(!bills.length){el('r-fill-info').innerHTML='<span style="color:var(--er)">⚠ No bill found for "'+q+'"</span>';return;}
+  if(!bills.length){el('r-fill-info').innerHTML='<span style="color:var(--er)">⚠ No bill found for "'+esc(q)+'"</span>';return;}
   bills.length===1?fillRet(bills[0]):showRetAC(bills);
   if(bills.length>1) _rc=bills;
 }
@@ -4847,28 +5204,49 @@ function fillRet(b){
   el('r-out').value=toISODate(b.outDate);
   if(!el('r-back').value) el('r-back').value=td();
   if(el('r-back-time')&&!el('r-back-time').value) el('r-back-time').value=nowHM();
-  el('r-prev').value=b.advance||'';
+  // FIX: every partial return of a bill used to be pre-filled with the FULL original advance, so the
+  // customer got the same advance credited again on each further return. Only the not-yet-used
+  // part of the advance is filled now.
+  var __advApplied=0; DB.returns.forEach(function(x){ if(x.original_bill_no===b.billNo) __advApplied+=Number(x.prev_advance)||0; });
+  var __advLeft=Math.max(0,(Number(b.advance)||0)-__advApplied);
+  el('r-prev').value=__advLeft||'';
   // BUGFIX: if this bill already has one or more earlier partial returns,
   // "Dispatched" must show what's still outstanding, not the full original
   // dispatch qty — otherwise a second/third return miscalculates Missing
   // (it would look like the already-returned pieces are missing all over
   // again) every time.
-  var alreadyReturned={};
+  // DEEP BUGFIX: this only summed qty from EARLIER RETURNS. It never
+  // subtracted qty already written off as LOST via the Missing Materials
+  // tab (missing_log entries with type 'lost'), so once an item was
+  // marked lost, "Dispatched/outstanding" here kept showing it as fully
+  // returnable — letting staff "return" (and re-stock) the same lost
+  // pieces a second time. Now lost qty is subtracted too, matching the
+  // real still-outstanding math used everywhere else (apiGetReturns,
+  // apiSettleMissingItems, and the server-side clamp in apiAddReturn).
+  var alreadyReturned={}, alreadyLost={};
   DB.returns.filter(function(x){ return x.original_bill_no===b.billNo; }).forEach(function(x){
     (x.items||[]).forEach(function(i){
       var key=(i.product||'').trim().toLowerCase();
       alreadyReturned[key]=(alreadyReturned[key]||0)+(Number(i.qty)||0);
+    });
+    (x.missing_log||[]).forEach(function(m){
+      if(m.type==='lost') (m.items||[]).forEach(function(i){
+        var key=String(i.name||'').trim().toLowerCase();
+        alreadyLost[key]=(alreadyLost[key]||0)+(Number(i.qty)||0);
+      });
     });
   });
   ALL_PRODUCTS.forEach(function(p){
     var found=(b.items||[]).find(function(i){return i.name.trim().toLowerCase()===p.name.trim().toLowerCase();});
     if(found){
       var already=alreadyReturned[p.name.trim().toLowerCase()]||0;
-      var outstanding=Math.max(0,(found.qty||0)-already);
+      var lost=alreadyLost[p.name.trim().toLowerCase()]||0;
+      var outstanding=Math.max(0,(found.qty||0)-already-lost);
       rDispatched[p.id]=outstanding; rQty[p.id]=outstanding;
       rCalcType[p.id]=(found.type==='1 month + extra days')?'monthly':'daily';
       var cEl=el('r-ctype-'+p.id); if(cEl) cEl.value=rCalcType[p.id];
-      var dEl=el('rd-'+p.id); if(dEl)dEl.textContent=outstanding+' pcs'+(already>0?' (of '+found.qty+', '+already+' already returned)':'');
+      var noteBits=[]; if(already>0) noteBits.push(already+' already returned'); if(lost>0) noteBits.push(lost+' marked lost');
+      var dEl=el('rd-'+p.id); if(dEl)dEl.textContent=outstanding+' pcs'+(noteBits.length?' (of '+found.qty+', '+noteBits.join(', ')+')':'');
       var qEl=el('rq-'+p.id); if(qEl){qEl.max=outstanding; qEl.value=outstanding;}
       var pEl=el('rp-'+p.id); if(pEl&&found.price){pEl.value=found.price; rPrice[p.id]=found.price;}
       var moEl=el('rmo-'+p.id); if(moEl&&found.monthPrice){moEl.value=found.monthPrice;}
@@ -4881,9 +5259,9 @@ function fillRet(b){
   calcR();
   el('r-fill-info').innerHTML=
     '<div style="background:#fff;border:1px solid #c8eadf;border-radius:7px;padding:10px 14px">'+
-    '✅ <b style="color:var(--tl-d)">Auto-filled!</b> 🧾 '+b.billNo+' | 👤 '+b.customer+'<br>'+
-    '📦 '+((b.items||[]).map(function(i){return i.name+' ×'+i.qty;}).join(', ')||'—')+'<br>'+
-    '<span style="color:var(--er);font-weight:700">🔴 Pending Balance: ₹'+Number(b.balance||0).toLocaleString('en-IN')+'</span></div>';
+    '✅ <b style="color:var(--tl-d)">Auto-filled!</b> 🧾 '+esc(b.billNo)+' | 👤 '+esc(b.customer)+'<br>'+
+    '📦 '+((b.items||[]).map(function(i){return esc(i.name)+' ×'+esc(i.qty);}).join(', ')||'—')+'<br>'+
+    '<span style="color:var(--er);font-weight:700">🔴 Pending Balance: ₹'+Number(b.balance||0).toLocaleString('en-IN')+'</span>'+(__advApplied>0?'<br><span style="color:var(--wn);font-size:12px">ℹ Advance ₹'+Number(__advApplied).toLocaleString('en-IN')+' was already adjusted in an earlier return of this bill.</span>':'')+'</div>';
   toast('✅ Auto-filled from: '+b.billNo);
 }
 function retClear(){el('r-search').value='';el('r-ac').style.display='none';el('r-fill-info').innerHTML='';}
@@ -4912,7 +5290,7 @@ function mkHTML(b,isR){
     var rateTxt=itMonthly?('₹'+(it.monthPrice||0)+'/mo'+(it.price?' + ₹'+it.price+'/day extra':'')):('₹'+it.price+'/day');
     var daysTxt = (typeof bDays!=='number') ? String(bDays) : (itMonthly?(bDays>30?'1mo+'+(bDays-30)+'d':'1mo'):(bDays+'d'));
     return '<tr style="border-bottom:1px solid '+(isR?'#d5ede8':'#f0e8cc')+'">'+
-      '<td style="padding:9px 13px">'+it.name+miss+'</td>'+
+      '<td style="padding:9px 13px">'+esc(it.name)+miss+'</td>'+
       '<td style="padding:9px;text-align:center">'+it.qty+'</td>'+
       '<td style="padding:9px;text-align:center">'+rateTxt+'</td>'+
       '<td style="padding:9px;text-align:center;color:#777">'+daysTxt+'</td>'+
@@ -4932,16 +5310,16 @@ function mkHTML(b,isR){
     '<div style="background:'+bg+';padding:22px 26px;border-radius:13px 13px 0 0;display:flex;justify-content:space-between;align-items:center">'+
       '<div><div style="color:#fff;font-size:19px;font-weight:700">'+COMPANY.toUpperCase()+'</div>'+
       '<div style="color:#bcd;font-size:10px;letter-spacing:2px;margin-top:4px">'+ttl+'</div></div>'+
-      '<div style="text-align:right"><div style="color:#fff;font-weight:700;font-size:13px">'+no+'</div>'+
+      '<div style="text-align:right"><div style="color:#fff;font-weight:700;font-size:13px">'+esc(no)+'</div>'+
       '<div style="color:#cde;font-size:11px;margin-top:3px">'+b.date+'</div>'+
-      (isR?'<div style="color:#cde;font-size:10px">Ref: '+b.originalBillNo+'</div>':'')+'</div></div>'+
+      (isR?'<div style="color:#cde;font-size:10px">Ref: '+esc(b.originalBillNo)+'</div>':'')+'</div></div>'+
     '<div style="background:'+(isR?'#f0faf6':'#f0f4ff')+';padding:14px 26px;display:grid;grid-template-columns:1fr 1fr;gap:10px;border-bottom:2px solid '+(isR?'#c8eadf':'#d7e0fb')+'">'+
-      '<div><div style="color:#999;font-size:10px;text-transform:uppercase">Customer</div><div style="font-weight:700;font-size:14px;margin-top:2px">'+b.customer+'</div></div>'+
-      '<div><div style="color:#999;font-size:10px;text-transform:uppercase">Contact</div><div style="font-weight:600;margin-top:2px">'+b.phone+'</div></div>'+
+      '<div><div style="color:#999;font-size:10px;text-transform:uppercase">Customer</div><div style="font-weight:700;font-size:14px;margin-top:2px">'+esc(b.customer)+'</div></div>'+
+      '<div><div style="color:#999;font-size:10px;text-transform:uppercase">Contact</div><div style="font-weight:600;margin-top:2px">'+esc(b.phone)+'</div></div>'+
       (isR
         ?'<div><div style="color:#999;font-size:10px;text-transform:uppercase">OUT Date</div><div style="font-size:12px;margin-top:2px">'+fdt(b.outDate)+'</div></div>'+
          '<div><div style="color:#999;font-size:10px;text-transform:uppercase">Return Date</div><div style="font-size:12px;margin-top:2px">'+fdt(b.returnDate)+(b.returnTime?' <span style="color:#999">('+b.returnTime+')</span>':'')+'<br><b style="color:'+ac+'">'+b.actualDays+'d / '+b.actualMonths+'mo</b>'+(isMonthly?' <span style="color:#0d9488;font-size:10px">(1 Month + Extra Days)</span>':'')+'</div></div>'
-        :'<div><div style="color:#999;font-size:10px;text-transform:uppercase">Site</div><div style="margin-top:2px">'+(b.address||'—')+'</div></div>'+
+        :'<div><div style="color:#999;font-size:10px;text-transform:uppercase">Site</div><div style="margin-top:2px">'+esc(b.address||'—')+'</div></div>'+
          '<div><div style="color:#999;font-size:10px;text-transform:uppercase">Period</div><div style="font-size:12px;margin-top:2px">'+fdt(b.outDate)+' → '+fdt(b.inDate)+'<br><b style="color:'+ac+'">'+(typeof b.days==='number'?(b.days+'d / '+b.months+'mo'):b.days)+'</b>'+(isMonthly?' <span style="color:#1d4ed8;font-size:10px">(1 Month + Extra Days)</span>':'')+'</div></div>')+
     '</div>'+
     '<table style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr style="background:'+ac+'">'+
@@ -4995,7 +5373,7 @@ function dlPDF(){
   var pdfDays=isR?b.actualDays:b.days;
   (b.items||[]).forEach(function(it){
     var pdfMonthly=it.type==='1 month + extra days';
-    var nm=it.name+(it.missing>0?' (⚠'+it.missing+' missing)':'');
+    var nm=it.name+(it.missing>0?' ('+it.missing+' missing)':'');
     doc.text(nm.slice(0,30),16,y);
     doc.text(String(it.qty),110,y);
     doc.text(pdfMonthly?('Rs'+(it.monthPrice||0)+'/mo'):('Rs'+it.price+'/d'),125,y);
@@ -5027,16 +5405,25 @@ function dlPDF(){
   y+=14;
   doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(120,120,120);
   doc.text('Thank you for choosing '+COMPANY+'.',14,y);
-  doc.save(no+'_'+(b.customer||'').replace(/\s+/g,'_')+'.pdf');
+  doc.save(no+'_'+(b.customer||'').replace(/\s+/g,'_').replace(/[\\\/:*?"<>|]+/g,'_')+'.pdf');
   toast('✅ PDF saved!');
 }
 
 // ── WHATSAPP ───────────────────────────────────────────────────
+// FIX: numbers were prefixed with 91 only when they did NOT start with "91" — but many valid Indian
+// mobiles start with 91 (e.g. 9123456789), so those links pointed to a wrong number.
+function waNum(p){
+  var d=String(p||'').replace(/\D/g,'');
+  if(d.length===10) return '91'+d;
+  if(d.length===11 && d.charAt(0)==='0') return '91'+d.slice(1);
+  if(d.length===12 && d.indexOf('91')===0) return d;
+  return d.length>10 && d.indexOf('91')===0 ? d : '91'+d;
+}
 function shareWA(){
   if(curMode==='sitefull'){
     var site=findSiteById(curSiteId); if(!site)return;
     var t=computeSiteTotals(site);
-    var ph=(site.phone||'').replace(/\D/g,''), wa=ph.startsWith('91')?ph:'91'+ph;
+    var wa=waNum(site.phone);
     // BUGFIX: same gap as the on-screen/PDF Full Site Bill — this WhatsApp
     // message never mentioned a refund, so a customer who overpaid would
     // be sent a statement that just said "Balance: ₹0" with no indication
@@ -5058,13 +5445,13 @@ function shareWA(){
       'Basic: ₹'+fmt(sl.basic)+'\nAllowances: ₹'+fmt(sl.allowances)+'\nDeductions: ₹'+fmt(sl.deductions)+'\nAdvance Paid: ₹'+fmt(sl.advance)+'\n\n'+
       '💰 *Net Payable: ₹'+fmt(sl.net)+'*\n'+(sl.balance>0?'⚠️ Balance: ₹'+fmt(sl.balance):'✅ FULLY PAID')+
       '\n\n🙏 '+COMPANY;
-    var ph2=(sl.phone||'').replace(/\D/g,''), wa2=ph2.startsWith('91')?ph2:'91'+ph2;
+    var wa2=waNum(sl.phone);
     window.open('https://wa.me/'+wa2+'?text='+encodeURIComponent(msg2),'_blank');
     return;
   }
   if(!curBill)return;
   var b=curBill, isR=curMode==='return';
-  var ph3=(b.phone||'').replace(/\D/g,''), wa3=ph3.startsWith('91')?ph3:'91'+ph3;
+  var wa3=waNum(b.phone);
   var msg3=isR
     ?'📦 *RETURN RECEIPT — '+COMPANY.toUpperCase()+'*\n'+b.returnBillNo+' | Ref: '+b.originalBillNo+'\n'+
       '👤 '+b.customer+' | 📞 '+b.phone+'\n\nReturned:\n'+
@@ -5088,6 +5475,22 @@ function shareWA(){
       '\n\n🙏 '+COMPANY;
   window.open('https://wa.me/'+wa3+'?text='+encodeURIComponent(msg3),'_blank');
 }
+// FIX: these async handlers wait for the network before saving. A double-click during that wait ran
+// them twice (duplicate bill / batch / payment). Each one now ignores clicks while it is running.
+function __once(fn){
+  var busy=false;
+  return function(){
+    if(busy) return;
+    busy=true; var r;
+    try{ r=fn.apply(this,arguments); }catch(e){ busy=false; throw e; }
+    return Promise.resolve(r).then(function(v){ busy=false; return v; }, function(e){ busy=false; throw e; });
+  };
+}
+['placeD','placeR','submitSiteOut','submitSiteIn','submitSiteMissing','resolveMissingItem'].forEach(function(n){
+  if(typeof window[n]==='function') window[n]=__once(window[n]);
+});
+// one-time notice after start-up (data recovered from backup / read-only folder)
+window.addEventListener('load',function(){ if(__startupNotice) setTimeout(function(){ toast(__startupNotice,15000); },900); });
 </script>
 <script>
 // ── AUTOCOMPLETE (bills/returns search tabs) ────────────────────
@@ -5111,9 +5514,9 @@ function onAC(q,t){
     var bs=t==='r'
       ?(fb<0?'<span style="color:#7c3aed">🟡 Refund ₹'+Math.abs(fb).toLocaleString('en-IN')+'</span>':fb<=0?'<span style="color:var(--ok)">✅ Paid</span>':'<span style="color:var(--er)">🔴 ₹'+fb.toLocaleString('en-IN')+'</span>')
       :(fb>0?'<span style="color:var(--er)">🔴 ₹'+fb.toLocaleString('en-IN')+' pending</span>':'<span style="color:var(--ok)">✅ Paid</span>');
-    return '<div class="ac-item" onclick="selAC(\''+no+'\',\''+t+'\')">'+
-      '<div class="ac-no">'+no+(b.originalBillNo&&t==='r'?' ← '+b.originalBillNo:'')+'</div>'+
-      '<div class="ac-meta">👤 '+b.customer+' &nbsp; 📞 '+b.phone+'</div>'+
+    return '<div class="ac-item" onclick="selAC(\''+jsq(no)+'\',\''+t+'\')">'+
+      '<div class="ac-no">'+esc(no)+(b.originalBillNo&&t==='r'?' ← '+esc(b.originalBillNo):'')+'</div>'+
+      '<div class="ac-meta">👤 '+esc(b.customer)+' &nbsp; 📞 '+esc(b.phone)+'</div>'+
       '<div class="ac-bal">'+bs+'</div></div>';
   }).join('');
   list.style.display='block';
@@ -5130,7 +5533,7 @@ function searchBills(){
   el('results-box').style.display='block';
   var bills=apiGetBills(q);
   el('results-count').textContent='('+bills.length+' found)';
-  el('results-list').innerHTML=bills.length?bills.map(rBC).join(''):'<div class="empty">No bills found'+(q?' for "'+q+'"':'')+'</div>';
+  el('results-list').innerHTML=bills.length?bills.map(rBC).join(''):'<div class="empty">No bills found'+(q?' for "'+esc(q)+'"':'')+'</div>';
 }
 function clearSearch(){el('search-input').value='';el('ac-d').style.display='none';searchBills();}
 
@@ -5141,7 +5544,7 @@ function searchReturns(){
   el('ret-results-box').style.display='block';
   var rets=apiGetReturns(q);
   el('ret-count').textContent='('+rets.length+' found)';
-  el('ret-results-list').innerHTML=rets.length?rets.map(rRC).join(''):'<div class="empty">No return bills found'+(q?' for "'+q+'"':'')+'</div>';
+  el('ret-results-list').innerHTML=rets.length?rets.map(rRC).join(''):'<div class="empty">No return bills found'+(q?' for "'+esc(q)+'"':'')+'</div>';
 }
 function clearRet(){el('ret-input').value='';el('ac-r').style.display='none';searchReturns();}
 
@@ -5149,26 +5552,26 @@ function clearRet(){el('ret-input').value='';el('ac-r').style.display='none';sea
 var _bcMap={}, _rcMap={};
 function rBC(b){
   var ip=b.status==='PAID'||b.balance<=0;
-  var is=(b.items||[]).map(function(i){return i.name+' ×'+i.qty;}).join(', ');
+  var is=(b.items||[]).map(function(i){return esc(i.name)+' ×'+esc(i.qty);}).join(', ');
   _bcMap[b.billNo]=b;
-  return '<div class="bill-card" onclick="openBByNo(\''+b.billNo.replace(/'/g,"\\'")+'\')">'+
-    '<div class="bc-top"><div><div class="bc-billno">'+b.billNo+'</div><span class="b-type">'+(b.sheetType||'MAIN')+'</span></div>'+
+  return '<div class="bill-card" onclick="openBByNo(\''+jsq(b.billNo)+'\')">'+
+    '<div class="bc-top"><div><div class="bc-billno">'+esc(b.billNo)+'</div><span class="b-type">'+(b.sheetType||'MAIN')+'</span></div>'+
     '<div style="text-align:right"><div class="bc-date">'+fmtDate(b.date)+'</div><span class="badge '+(ip?'b-ok':'b-er')+'">'+(ip?'✅ PAID':'⚠ PENDING')+'</span></div></div>'+
-    '<div class="bc-name">👤 '+b.customer+'</div>'+
-    '<div class="bc-phone">📞 '+b.phone+(b.address?' | 📍 '+b.address:'')+'</div>'+
+    '<div class="bc-name">👤 '+esc(b.customer)+'</div>'+
+    '<div class="bc-phone">📞 '+esc(b.phone)+(b.address?' | 📍 '+esc(b.address):'')+'</div>'+
     '<div class="bc-items">📦 '+(is||'—')+'</div>'+
     '<div class="bc-bottom"><div style="font-size:12px;color:var(--mu)">⏱ '+b.days+'d/'+b.months+'mo | OUT: '+fdt(b.outDate)+'</div>'+
     '<div class="bc-bal" style="color:'+(ip?'var(--ok)':'var(--er)')+'">'+(ip?'✅ PAID':'₹ '+Number(b.balance).toLocaleString('en-IN')+' pending')+'</div></div></div>';
 }
 function rRC(r){
   var fb=Number(r.finalBalance), isRef=fb<0, ip=r.status==='FULLY PAID'||fb<=0;
-  var is=(r.items||[]).map(function(i){return i.name+' ×'+i.qty;}).join(', ');
+  var is=(r.items||[]).map(function(i){return esc(i.name)+' ×'+esc(i.qty);}).join(', ');
   var sb=isRef?'<span class="badge b-pu">🟡 REFUND DUE</span>':ip?'<span class="badge b-ok">✅ FULLY PAID</span>':'<span class="badge b-er">⚠ BALANCE DUE</span>';
   _rcMap[r.returnBillNo]=r;
-  return '<div class="bill-card ret-card" onclick="openRByNo(\''+r.returnBillNo.replace(/'/g,"\\'")+'\')">'+
-    '<div class="bc-top"><div><div class="bc-billno ret">'+r.returnBillNo+'</div><span class="b-type" style="border-color:var(--tl);color:var(--tl)">RETURN</span></div>'+
-    '<div style="text-align:right"><div class="bc-date">Ref: '+r.originalBillNo+'</div>'+sb+'</div></div>'+
-    '<div class="bc-name">👤 '+r.customer+'</div><div class="bc-phone">📞 '+r.phone+'</div>'+
+  return '<div class="bill-card ret-card" onclick="openRByNo(\''+jsq(r.returnBillNo)+'\')">'+
+    '<div class="bc-top"><div><div class="bc-billno ret">'+esc(r.returnBillNo)+'</div><span class="b-type" style="border-color:var(--tl);color:var(--tl)">RETURN</span></div>'+
+    '<div style="text-align:right"><div class="bc-date">Ref: '+esc(r.originalBillNo)+'</div>'+sb+'</div></div>'+
+    '<div class="bc-name">👤 '+esc(r.customer)+'</div><div class="bc-phone">📞 '+esc(r.phone)+'</div>'+
     '<div class="bc-items">📦 Returned: '+(is||'—')+'</div>'+
     '<div class="bc-bottom"><div style="font-size:12px;color:var(--mu)">⏱ Actual: '+r.actualDays+'d/'+r.actualMonths+'mo | '+fdt(r.returnDate)+'</div>'+
     '<div class="bc-bal" style="color:'+(isRef?'#7c3aed':ip?'var(--ok)':'var(--er)')+'">'+(isRef?'🟡 Refund ₹'+Math.abs(fb).toLocaleString('en-IN'):ip?'✅ PAID':'🔴 ₹'+fb.toLocaleString('en-IN')+' due')+'</div></div></div>';
@@ -5267,9 +5670,9 @@ function loadPending(){
       var isSite=p.type==='SITE';
       return '<div class="pc" style="border-color:rgba(124,58,237,.35)">'+
         (isSite?'<span class="od-tag" style="background:rgba(124,58,237,.12);border-color:#7c3aed;color:#7c3aed">SITE</span>':'')+
-        '<div class="pc-name">👤 '+p.customer+'</div>'+
-        '<div class="pc-phone">📞 '+p.phone+'</div>'+
-        '<div class="pc-bill" style="color:#7c3aed">'+(isSite?'🏗️ ':'🧾 ')+p.billNo+'</div>'+
+        '<div class="pc-name">👤 '+esc(p.customer)+'</div>'+
+        '<div class="pc-phone">📞 '+esc(p.phone)+'</div>'+
+        '<div class="pc-bill" style="color:#7c3aed">'+(isSite?'🏗️ ':'🧾 ')+esc(p.billNo)+'</div>'+
         '<div class="pc-bal" style="color:#7c3aed">🟡 Refund ₹ '+Math.abs(Number(p.balance)).toLocaleString('en-IN')+'</div>'+
         (isSite?'<button onclick="swMain(\'sites\');openSite('+p.siteId+')" class="btn bt" style="margin-top:8px;width:100%;padding:7px">🏗️ View Site</button>':'')+
         '</div>';
@@ -5279,7 +5682,7 @@ function loadPending(){
 }
 
 // ── SETTLE PAYMENT ────────────────────────────────────────────
-var _smBillNo=null, _smType=null, _smMode='BILL', _smBusy=false, _smSid=null;
+var _smBillNo=null, _smType=null, _smMode='BILL', _smBusy=false, _smSid=null, _smSalId=null;
 function bSettle(btn){
   var billNo=btn.getAttribute('data-bn');
   var cust=btn.getAttribute('data-cust');
@@ -5289,8 +5692,8 @@ function bSettle(btn){
   _smType=btn.getAttribute('data-type')||'DISPATCH';
   _smBillNo=billNo;
   el('sm-info').innerHTML=
-    '<div style="color:var(--tl-d);font-weight:700;font-size:14px;margin-bottom:6px">🧾 '+billNo+'</div>'+
-    '👤 '+cust+' &nbsp; 📞 '+phone+'<br>'+
+    '<div style="color:var(--tl-d);font-weight:700;font-size:14px;margin-bottom:6px">🧾 '+esc(billNo)+'</div>'+
+    '👤 '+esc(cust)+' &nbsp; 📞 '+esc(phone)+'<br>'+
     '<span style="color:var(--er);font-weight:700;font-size:16px;margin-top:4px;display:block">🔴 Pending Balance: ₹'+bal.toLocaleString('en-IN')+'</span>';
   el('sm-amt').value=bal;
   el('sm-notes').value='';
@@ -5334,13 +5737,30 @@ function siteSettlePayment(){
   el('settle-modal').style.justifyContent='center';
   setTimeout(function(){el('sm-amt').focus();},100);
 }
-function smClose(){ el('settle-modal').style.display='none'; _smBillNo=null; _smMode='BILL'; _smBusy=false; _smSid=null; }
+function smClose(){ el('settle-modal').style.display='none'; _smBillNo=null; _smMode='BILL'; _smBusy=false; _smSid=null; _smSalId=null; }
 async function smSubmit(){
   if(!_smBillNo)return;
   var amt=parseFloat(el('sm-amt').value)||0;
   var notes=el('sm-notes').value.trim();
   if(amt<=0){toast('⚠ Enter payment amount');return;}
   var res=el('sm-result');
+  if(_smMode==='SALARY'){
+    var sr=DB.salaries.find(function(x){ return x.id===_smSalId; });
+    res.style.display='block';
+    if(!sr){ res.style.background='rgba(220,38,38,.12)'; res.style.color='var(--er)'; res.textContent='⚠ Salary record not found'; return; }
+    var sbal=Number(sr.balance)||0;
+    if(amt>sbal+0.005){ res.style.background='rgba(220,38,38,.12)'; res.style.color='var(--er)'; res.textContent='⚠ Amount is more than the balance (₹'+fmt(sbal)+')'; return; }
+    if(_smBusy) return; _smBusy=true;
+    sr.advance=(Number(sr.advance)||0)+amt;
+    sr.balance=Math.max(0, (Number(sr.net)||0)-sr.advance);
+    sr.status=sr.balance<=0?'PAID':'PENDING';
+    auditLog('SALARY_PAID','Salary payment ₹'+amt+' — '+empName(sr.emp_id),String(sr.id));
+    saveDB();
+    res.style.background='rgba(22,163,74,.12)'; res.style.color='var(--ok)';
+    res.textContent=sr.balance<=0?'✅ Salary fully paid.':'⚠ Partial. Remaining: ₹'+Number(sr.balance).toLocaleString('en-IN');
+    setTimeout(function(){ smClose(); renderPayroll(); },1000);
+    return;
+  }
   if(_smMode==='SITE'){
     // BUGFIX (network sync — site payment id collision): site.payments ids
     // are assigned as "current array length + 1", the same collision risk
@@ -5349,6 +5769,7 @@ async function smSubmit(){
     // the second payment gets silently dropped on the next merge). Sync
     // first so the id reflects the Server's latest before this PC adds
     // its own payment.
+    if(_smBusy) return; _smBusy=true;   // FIX: double-click recorded the site payment twice
     await netSyncBeforeCommit();
     var d=apiSettleSitePayment(curSiteId, amt, notes);
     if(d.status==='ok' && NET.mode==='client' && NET.connected) netPushState();
@@ -5361,7 +5782,7 @@ async function smSubmit(){
       setTimeout(function(){ smClose(); renderSiteWorkspace(); },1400);
     } else {
       res.style.background='rgba(220,38,38,.12)'; res.style.color='var(--er)';
-      res.textContent='⚠ '+(d.message||'Unknown error');
+      _smBusy=false; res.textContent='⚠ '+(d.message||'Unknown error');
     }
     return;
   }
@@ -5569,6 +5990,8 @@ document.addEventListener('click',function(e){
 // ══════════════════════════════════════════════════════════════
 // SHARED HELPERS FOR NEW MODULES
 // ══════════════════════════════════════════════════════════════
+// escape text that goes inside a single-quoted JS string inside an HTML attribute (onclick="f('...')")
+function jsq(s){ return String(s==null?'':s).replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 function esc(s){
   return String(s==null?'':s).replace(/[&<>"']/g,function(c){
     var map={'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'};
@@ -5577,7 +6000,9 @@ function esc(s){
 }
 function empName(id){
   var e=DB.employees.find(function(x){ return x.id===Number(id); });
-  return e?e.name:'Unknown';
+  if(e) return e.name;
+  var snap=(DB.salaries||[]).concat(DB.attendance||[]).find(function(x){ return x.emp_id===Number(id) && x.emp_name; });
+  return snap ? snap.emp_name+' (removed)' : 'Unknown';
 }
 function fillEmpSelects(){
   var list=DB.employees.slice().sort(function(a,b){ return (a.name||'').localeCompare(b.name||''); });
@@ -5593,22 +6018,25 @@ function addCustomer(){
   var name=val('c-name'), phone=val('c-phone');
   if(!name||!phone){ toast('⚠ Contact name and phone are required'); return; }
   if(!isValidPhone(phone)){ toast('⚠ Enter a valid 10-digit mobile number'); return; }
-  if(DB.customers.some(function(c){ return (c.phone||'').trim()===phone.trim(); })){ toast('⚠ A contact with this phone number already exists'); return; }
-  DB.customers.push({id:DB._cid++, name:name, phone:phone, vehicle:val('c-vehicle'), address:val('c-addr'), notes:val('c-notes'), created_at:new Date().toISOString()});
+  if(DB.customers.some(function(c){ return phoneKey(c.phone)===phoneKey(phone); })){ toast('⚠ A contact with this phone number already exists'); return; }
+  DB.customers.push({id:DB._cid++, uid:uid(), name:name, phone:phone, vehicle:val('c-vehicle'), address:val('c-addr'), notes:val('c-notes'), created_at:new Date().toISOString()});
   saveDB();
   ['c-name','c-phone','c-vehicle','c-addr','c-notes'].forEach(function(id){ if(el(id)) el(id).value=''; });
   toast('✅ Contact saved');
   renderCustomers();
 }
+// FIX: phones were compared as raw text, so "+91 98765 43210", "098765 43210" and "9876543210" (all accepted by the
+// phone check) counted as three different customers - a customer's rentals/outstanding showed as 0.
+function phoneKey(p){ var d=String(p||'').replace(/\D/g,''); return d.length>10 ? d.slice(-10) : d; }
 function custStats(phone){
-  var p=(phone||'').trim();
-  var sales=DB.sales.filter(function(s){ return (s.phone||'').trim()===p; });
-  var rets=DB.returns.filter(function(r){ return (r.phone||'').trim()===p; });
+  var p=phoneKey(phone);
+  var sales=DB.sales.filter(function(s){ return p && phoneKey(s.phone)===p; });
+  var rets=DB.returns.filter(function(r){ return p && phoneKey(r.phone)===p; });
   // BUGFIX: Site Ledger balances (DB.sites) were never included here, so a
   // customer with an OPEN site owing real money still showed "₹0 outstanding"
   // / a green "paid" badge on the Customers tab — same class of bug as the
   // Dashboard/Reports/Pending fix, just missed on this screen.
-  var sites=(DB.sites||[]).filter(function(s){ return s.status==='OPEN' && (s.phone||'').trim()===p; });
+  var sites=(DB.sites||[]).filter(function(s){ return s.status==='OPEN' && p && phoneKey(s.phone)===p; });
   var siteOutstanding = sites.reduce(function(s,x){ return s+computeSiteTotals(x).balanceDue; },0);
   var outstanding = sales.reduce(function(s,x){ return s+(Number(x.balance)||0); },0)
     + rets.reduce(function(s,x){ return s+Math.max(0,Number(x.final_balance)||0); },0)
@@ -5704,7 +6132,7 @@ function addEmployee(){
   Promise.all(jobs).then(function(results){
     var docs={};
     DOC_FIELDS.forEach(function(df,i){ docs[df[0]]={front:results[i*2]||null, back:results[i*2+1]||null}; });
-    var newEmp={id:DB._eid, name:name, phone:phone, join_date:val('e-join'), notes:val('e-notes'), docs:docs, performance:[], created_at:new Date().toISOString()};
+    var newEmp={id:DB._eid, uid:uid(), name:name, phone:phone, join_date:val('e-join'), notes:val('e-notes'), docs:docs, performance:[], created_at:new Date().toISOString()};
     DB.employees.push(newEmp);
     DB._eid++;
     var ok=saveDB();
@@ -5826,7 +6254,9 @@ function addPerfNote(id,type){
   toggleEmpDetail(id);
 }
 function deleteEmployee(id){
-  if(!confirm('Delete this employee and all their stored documents/performance notes?')) return;
+  if(!confirm('Delete this employee and all their stored documents/performance notes? (Their attendance and salary history is kept.)')) return;
+  var gone=DB.employees.find(function(e){ return e.id===id; });
+  if(gone){ DB.salaries.concat(DB.attendance).forEach(function(r){ if(r.emp_id===id) r.emp_name=gone.name; }); }
   DB.employees=DB.employees.filter(function(e){ return e.id!==id; });
   saveDB(); renderEmployees(); fillEmpSelects();
 }
@@ -5839,7 +6269,13 @@ function markAttendance(){
   if(!empId){ toast('⚠ Add an employee first'); return; }
   var date=val('a-date');
   if(!date){ toast('⚠ Select a date'); return; }
-  DB.attendance.push({id:DB._aid++, emp_id:Number(empId), date:date, status:el('a-status').value, check_in:val('a-in'), check_out:val('a-out'), overtime:Number(val('a-ot'))||0, notes:val('a-notes')});
+  // FIX: the same employee could be marked twice on one date, so the monthly summary counted the day twice.
+  var dupAtt=DB.attendance.find(function(x){ return x.emp_id===Number(empId) && x.date===date; });
+  if(dupAtt){
+    if(!confirm('Attendance for this employee on this date is already marked ('+dupAtt.status+'). Replace it?')) return;
+    DB.attendance=DB.attendance.filter(function(x){ return x!==dupAtt; });
+  }
+  DB.attendance.push({id:DB._aid++, uid:uid(), emp_id:Number(empId), date:date, status:el('a-status').value, check_in:val('a-in'), check_out:val('a-out'), overtime:Number(val('a-ot'))||0, notes:val('a-notes')});
   saveDB();
   el('a-in').value=''; el('a-out').value=''; el('a-ot').value=''; el('a-notes').value='';
   toast('✅ Attendance saved');
@@ -5889,10 +6325,12 @@ function addSalary(){
   if(!month){ toast('⚠ Select a month'); return; }
   var basic=Number(val('s-basic'))||0;
   if(basic<=0){ toast('⚠ Enter basic salary'); return; }
+  // FIX: a second record for the same employee + month allowed the salary to be paid twice.
+  if(DB.salaries.some(function(x){ return x.emp_id===Number(empId) && x.month===month; })){ toast('⚠ A salary record for this employee and month already exists — pay or delete that one instead', 5000); return; }
   var allow=Number(val('s-allow'))||0, ded=Number(val('s-ded'))||0, adv=Number(val('s-adv'))||0;
   var net=Math.max(0, basic+allow-ded);
   var bal=Math.max(0, net-adv);
-  DB.salaries.push({id:DB._slid++, emp_id:Number(empId), month:month, basic:basic, allowances:allow, deductions:ded, advance:adv, net:net, balance:bal, status: bal<=0?'PAID':'PENDING'});
+  DB.salaries.push({id:DB._slid++, uid:uid(), emp_id:Number(empId), month:month, basic:basic, allowances:allow, deductions:ded, advance:adv, net:net, balance:bal, status: bal<=0?'PAID':'PENDING'});
   saveDB();
   ['s-basic','s-allow','s-ded','s-adv'].forEach(function(id){ el(id).value=''; });
   el('s-net').textContent='Net Payable: ₹ 0';
@@ -5912,19 +6350,24 @@ function renderPayroll(){
       ' <button class="btn br" style="padding:5px 10px" onclick="deleteSalary('+r.id+')">🗑</button></td></tr>';
   }).join('');
 }
+// FIX: this used window.prompt(), which Electron does not support (it throws), so the Pay button did
+// nothing in the .exe. It now uses the app's own payment dialog (same one as bill settlements).
 function paySalaryBalance(id){
   var r=DB.salaries.find(function(x){ return x.id===id; });
   if(!r) return;
-  var amt=prompt('Enter payment amount (balance ₹'+fmt(r.balance)+'):', r.balance);
-  if(amt===null) return;
-  amt=Number(amt)||0;
-  if(amt<=0) return;
-  r.advance=(Number(r.advance)||0)+amt;
-  r.balance=Math.max(0, r.net-r.advance);
-  r.status=r.balance<=0?'PAID':'PENDING';
-  saveDB();
-  toast('✅ Payment recorded');
-  renderPayroll();
+  if(!(Number(r.balance)>0)){ toast('No balance due on this salary'); return; }
+  _smMode='SALARY'; _smBusy=false; _smSid=uid(); _smSalId=id; _smBillNo='SALARY-'+id;
+  el('sm-info').innerHTML=
+    '<div style="color:var(--tl-d);font-weight:700;font-size:14px;margin-bottom:6px">💵 Salary — '+esc(monthLabel(r.month))+'</div>'+
+    '👤 '+esc(empName(r.emp_id))+'<br>'+
+    '<span style="color:var(--er);font-weight:700;font-size:16px;margin-top:4px;display:block">🔴 Balance: ₹'+Number(r.balance).toLocaleString('en-IN')+'</span>';
+  el('sm-amt').value=r.balance;
+  el('sm-notes').value='';
+  el('sm-result').style.display='none';
+  el('settle-modal').style.display='flex';
+  el('settle-modal').style.alignItems='center';
+  el('settle-modal').style.justifyContent='center';
+  setTimeout(function(){ el('sm-amt').focus(); },100);
 }
 function deleteSalary(id){
   if(!confirm('Delete this payroll record?')) return;
@@ -6040,7 +6483,7 @@ function dlSalaryPDF(){
   doc.text('Balance: '+(s.balance>0?'Rs '+Number(s.balance).toLocaleString('en-IN'):'FULLY PAID'),14,y); y+=14;
   doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(120,120,120);
   doc.text('This is a computer-generated salary slip from '+COMPANY+'.',14,y);
-  doc.save(s.slipNo+'_'+(s.empName||'').replace(/\s+/g,'_')+'_'+s.month+'.pdf');
+  doc.save(s.slipNo+'_'+(s.empName||'').replace(/\s+/g,'_').replace(/[\\\/:*?"<>|]+/g,'_')+'_'+s.month+'.pdf');
   toast('✅ Salary slip PDF saved!');
 }
 function downloadSalarySlip(id){
@@ -6057,7 +6500,7 @@ function downloadSalarySlip(id){
 function addExpense(){
   var amt=Number(val('ex-amt'))||0;
   if(amt<=0){ toast('⚠ Enter a valid amount'); return; }
-  DB.expenses.push({id:DB._exid++, category:el('ex-cat').value, amount:amt, date:val('ex-date')||td(), notes:val('ex-notes')});
+  DB.expenses.push({id:DB._exid++, uid:uid(), category:el('ex-cat').value, amount:amt, date:val('ex-date')||td(), notes:val('ex-notes')});
   saveDB();
   el('ex-amt').value=''; el('ex-notes').value='';
   toast('✅ Expense saved');
@@ -6085,7 +6528,7 @@ function deleteExpense(id){
 function addIncome(){
   var amt=Number(val('in-amt'))||0, src=val('in-src');
   if(!src||amt<=0){ toast('⚠ Enter source and a valid amount'); return; }
-  DB.incomes.push({id:DB._inid++, source:src, amount:amt, date:val('in-date')||td(), notes:val('in-notes')});
+  DB.incomes.push({id:DB._inid++, uid:uid(), source:src, amount:amt, date:val('in-date')||td(), notes:val('in-notes')});
   saveDB();
   el('in-src').value=''; el('in-amt').value=''; el('in-notes').value='';
   toast('✅ Income saved');
@@ -6102,7 +6545,7 @@ function renderIncome(){
   // Collected" always OVERSTATED collections — it treated the entire
   // estimated total as received even when part of the return's final
   // balance was still due from the customer.
-  var latestRet=latestReturnByBill();
+  var latestRet=billReturnTotals();
   var rentalTotal=DB.sales.reduce(function(s,x){
     var r=latestRet[x.bill_no];
     return s + (x.status==='RETURNED' && r ? (Number(r.total_rental)||0) : (Number(x.total)||0));
@@ -6133,7 +6576,7 @@ function deleteIncome(id){
 function addMaintenance(){
   var item=val('m-item'), issue=val('m-issue');
   if(!item||!issue){ toast('⚠ Enter equipment and issue'); return; }
-  DB.maintenance.push({id:DB._mid++, item:item, issue:issue, date:val('m-date')||td(), cost:Number(val('m-cost'))||0, status:el('m-status').value, notes:val('m-notes')});
+  DB.maintenance.push({id:DB._mid++, uid:uid(), item:item, issue:issue, date:val('m-date')||td(), cost:Number(val('m-cost'))||0, status:el('m-status').value, notes:val('m-notes')});
   saveDB();
   el('m-item').value=''; el('m-issue').value=''; el('m-cost').value=''; el('m-notes').value='';
   toast('✅ Maintenance record saved');
@@ -6180,7 +6623,7 @@ function renderDashboard(period){
   // BUGFIX: same staleness issue as renderIncome() below — a RETURNED
   // bill's real rent is in its return record's total_rental, not the
   // dispatch bill's original estimated total.
-  var latestRetForDash=latestReturnByBill();
+  var latestRetForDash=billReturnTotals();
   var rentalTotal=DB.sales.filter(function(x){ return inPeriod(x.created_at, period); }).reduce(function(s,x){
     var r=latestRetForDash[x.bill_no];
     return s + (x.status==='RETURNED' && r ? (Number(r.total_rental)||0) : (Number(x.total)||0));
@@ -6372,7 +6815,7 @@ function importBackup(input){
       delete d.auth; d.pendingInvDeltas={};
       DB=d;
       ['customers','employees','attendance','salaries','expenses','incomes','maintenance','sites','auditLog','paymentLog'].forEach(function(k){ if(!Array.isArray(DB[k])) DB[k]=[]; });
-      ['_sid','_rid','_cid','_eid','_aid','_slid','_exid','_inid','_mid','_stid','_bnid'].forEach(function(k){ if(typeof DB[k]!=='number') DB[k]=1; });
+      ['_sid','_rid','_cid','_eid','_aid','_slid','_exid','_inid','_mid','_stid','_bnid','_invid','_siteid'].forEach(function(k){ if(typeof DB[k]!=='number') DB[k]=1; });
       auditLog('BACKUP','Backup restored'+(safety?' (safety copy kept)':''));
       saveDB();
       toast('✅ Backup restored — reloading…');
@@ -6451,6 +6894,7 @@ function ulXL(input){
       if(d.status==='ok'){el('xl-st').textContent='✅ Synced!';toast('✅ Inventory synced!');loadStock();}
       else{el('xl-st').textContent='⚠ Error';toast('⚠ '+(d.message||'Error'));}
     }catch(ex){el('xl-st').textContent='⚠ Error';toast('⚠ '+ex.message);}
+    input.value='';   // FIX: picking the same file a second time did nothing
   };
   reader.readAsArrayBuffer(input.files[0]);
 }
