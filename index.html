@@ -192,6 +192,12 @@ tr:last-child td{border-bottom:none}
 .alert-item{padding:8px 10px;border-radius:8px;margin-bottom:6px;font-size:12px;border:1px solid var(--bd);background:var(--soft)}
 .alert-item.od{border-color:var(--er);background:rgba(220,38,38,.07)}
 .alert-empty{padding:26px 14px;text-align:center;color:var(--mu);font-size:12px}
+/* Windows 7 has no color emoji font at all (Segoe UI Emoji arrived only in
+   Windows 8.1/10), so 🔴🟡🟢✅⚠ etc. show up blank/boxes there. This app now
+   swaps every emoji character for a bundled Twemoji SVG image (see the
+   twemoji init script near the end of <body>), so this rule makes those
+   images sit inline the same size/height as a normal emoji character. */
+img.emoji{height:1em;width:1em;margin:0 .05em 0 .1em;vertical-align:-0.1em}
 </style>
 </head>
 <body>
@@ -6898,6 +6904,56 @@ function ulXL(input){
   };
   reader.readAsArrayBuffer(input.files[0]);
 }
+</script>
+<!--
+  WIN7 EMOJI FIX
+  ==============
+  Windows 7 (and, for a few icons, 8/8.1) has no built-in color emoji font,
+  so emoji characters typed straight into HTML/JS show up as blank boxes or
+  don't render at all on those machines, even though the exact same app
+  looks fine on Windows 10/11 (which do ship Segoe UI Emoji).
+
+  Fix: bundle the Twemoji icon set + parser locally (vendor/twemoji.min.js,
+  assets/twemoji/svg/*.svg — no internet needed, works fully offline) and
+  replace every emoji character in the page with the matching local SVG
+  <img>. Since these are our own image files, not a system font, they look
+  identical on Windows 7, 8, 8.1, 10 and 11.
+
+  The app builds a lot of its UI dynamically via innerHTML (buttons, toasts,
+  lists, etc. — see the many toast('✅ ...') / el(...).innerHTML calls above),
+  so a single one-time twemoji.parse() on page load isn't enough; new emoji
+  keep appearing after that. A MutationObserver re-runs the (very cheap)
+  parse pass whenever the DOM changes, debounced so it doesn't run on every
+  tiny update.
+-->
+<script src="vendor/twemoji.min.js"></script>
+<script>
+(function(){
+  if (typeof twemoji === 'undefined') return; // fail-safe: never block the app
+  function parseEmoji(node){
+    try{
+      twemoji.parse(node || document.body, {
+        base: 'assets/twemoji/',
+        folder: 'svg',
+        ext: '.svg'
+      });
+    }catch(e){ /* never let an emoji-icon glitch break the app */ }
+  }
+  // Initial pass once the page has loaded.
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', function(){ parseEmoji(); });
+  } else {
+    parseEmoji();
+  }
+  // Re-run after any dynamic UI update (new screen, toast, list refresh, etc).
+  var pending = false;
+  var mo = new MutationObserver(function(){
+    if (pending) return;
+    pending = true;
+    setTimeout(function(){ pending = false; parseEmoji(); }, 150);
+  });
+  mo.observe(document.body, { childList: true, subtree: true, characterData: true });
+})();
 </script>
 </body>
 </html>
