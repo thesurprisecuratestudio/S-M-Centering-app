@@ -60,7 +60,21 @@ function createWindow() {
   });
 }
 
-app.whenReady().then(createWindow);
+// FIX: launching the .exe twice opened two windows that both held their own copy of the data and
+// overwrote each other's data file (one window's entries were lost). Only ONE instance may run;
+// a second launch just brings the existing window to the front.
+const gotLock = app.requestSingleInstanceLock();
+if (!gotLock) {
+  app.quit();
+} else {
+  app.on('second-instance', () => {
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.focus();
+    }
+  });
+  app.whenReady().then(createWindow);
+}
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
